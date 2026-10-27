@@ -323,7 +323,7 @@ html, body {
 /* trailer: captions and the logo cards (test builds only) */
 .clean .drop-btn, .clean .toast { display: none !important; }
 .caption {
-  position: fixed; left: 50%; bottom: 9%; z-index: 16; transform: translateX(-50%) rotate(-2deg); pointer-events: none;
+  position: fixed; left: 50%; bottom: 9%; z-index: 16; transform: translateX(-50%) rotate(-2deg) scale(var(--pop, 1)); pointer-events: none;
   max-width: 92vw; padding: 0.35em 0.8em; border-radius: 0.5em; text-align: center; white-space: nowrap;
   font-family: var(--display); font-size: clamp(2rem, 6.2vmin, 4.6rem); color: #fff; background: var(--red);
   box-shadow: 0 0.12em 0 var(--ink), 0 0.4em 1.2em rgba(0, 0, 0, 0.3); -webkit-text-stroke: 1.5px var(--ink);

@@ -559,10 +559,11 @@ if (TEST) {
       buildList();
       updateHud(true);
     },
-    caption(text) {
+    caption(text, scale = 1) {
       const el = document.getElementById('caption');
       el.textContent = text || '';
       el.hidden = !text;
+      el.style.setProperty('--pop', scale);
     },
     portalMuted: () => audio.isPortalMuted(),
     /** A still for covers and icons: a ride `seconds` in, without the HUD, with the logo if `title`. */

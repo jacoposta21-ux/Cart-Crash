@@ -519,7 +519,7 @@ function stepLight(g, e) {
   if (e.state === 'idle' && e.willRed) {
     // It turns yellow when, at this speed, the cart would get there in the middle of the red.
     const eta = (stopY - c.y) / Math.max(c.v, 3);
-    if (eta < YELLOW_TIME + 1.6 && stopY > c.y) { e.state = 'cycle'; e.t0 = g.t; emit(g, 'yellow', { y: e.y }); }
+    if (eta < (e.lead ?? YELLOW_TIME + 1.6) && stopY > c.y) { e.state = 'cycle'; e.t0 = g.t; emit(g, 'yellow', { y: e.y }); }
   }
   if (e.state === 'cycle' && !e.redSaid && lightPhase(g, e) === 'red') { e.redSaid = true; emit(g, 'red', { y: e.y }); }
   if (!e.passed && c.y >= stopY) {
@@ -568,7 +568,7 @@ function stepRail(g, e) {
   if (e.disabled) return;
   if (e.state === 'idle') {
     const eta = (e.y - c.y) / Math.max(c.v, 3);
-    if (eta < RAIL_WARN + 2.6 && e.y > c.y) {
+    if (eta < (e.lead ?? RAIL_WARN + 2.6) && e.y > c.y) {
       e.state = 'warn';
       e.t0 = g.t;
       e.dir = g.rand() < 0.5 ? -1 : 1;

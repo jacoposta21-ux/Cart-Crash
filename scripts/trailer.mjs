@@ -2,8 +2,9 @@
 //   crazygames/preview-1920x1080.mp4   landscape
 //   crazygames/preview-1080x1620.mp4   portrait (2:3)
 // One staged race (scripts/trailer-stage.mjs) told in order, with captions:
-// logo card, grab the list, jump, the dog, the red light, the train, the
-// checkout, logo card. The waits at the light and the crossing run faster.
+// logo card, grab the list, jump, the dog, through the red with the warden on
+// your tail, a hard stop for the train, the sprint to the checkout, logo card.
+// Standing still runs faster (and the train goes by at double speed).
 // Usage: node scripts/trailer.mjs [landscape|portrait]
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -14,8 +15,8 @@ import { SEED, STAGE, captionFor } from './trailer-stage.mjs';
 
 const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome';
 const FPS = 30;
-const SPEED = 1.2; // played a little faster than recorded: ~30 s, and more lively
-const INTRO = 1.8, OUTRO = 2.4, END_CARD = 1.3; // seconds of the game's own end screen (with the time)
+const SPEED = 1.25; // played a little faster than recorded: snappier, and under 30 s
+const INTRO = 1.4, OUTRO = 2.4, END_CARD = 1.3; // seconds of the game's own end screen (with the time)
 const formats = { landscape: [1920, 1080], portrait: [1080, 1620], draft: [640, 360] };
 const which = process.argv[2] ? [process.argv[2]] : Object.keys(formats);
 
@@ -58,20 +59,29 @@ for (const fmt of which) {
     window.__cc.stage(stage);
     document.getElementById('card').hidden = true;
   }, STAGE);
-  let wait = 0, onEnd = 0;
+  let wait = 0, onEnd = 0, shown = 0, lastCaption = '';
   for (;;) {
     const state = await page.evaluate(() => {
       const g = window.__cc.game;
       // the caption rules live in trailer-stage.mjs; mirrored here through the game state
       window.__cc.frame(1 / 30);
-      return { y: g.cart.y, v: g.cart.v, won: g.won, over: g.over, t: g.t, checkoutY: g.checkoutY, dogs: g.dogs.length, mode: window.__cc.mode };
+      // (the train is on the road from 2.4 s after the bells for about 4 s)
+      const train = g.world.entities.some((e) => e.kind === 'rail' && e.state === 'warn' && g.t - e.t0 > 2.2 && g.t - e.t0 < 6.4);
+      return {
+        cart: { y: g.cart.y, v: g.cart.v }, won: g.won, over: g.over, t: g.t, checkoutY: g.checkoutY, train, mode: window.__cc.mode,
+        dogs: g.dogs.length, dogFed: g.dogs.some((d) => d.state !== 'chase'), cop: g.cops[0]?.state, copGap: g.cops[0]?.gap,
+      };
     });
-    const caption = captionFor({ cart: { y: state.y }, won: state.won, checkoutY: state.checkoutY, dogs: { length: state.dogs } });
-    await page.evaluate((c) => window.__cc.caption(c), caption);
-    // Waiting at the light or the crossing: keep one frame in five.
-    const waiting = state.v < 2.5 && !state.over;
+    const caption = captionFor(state);
+    shown = caption === lastCaption ? shown + 1 : 0;
+    lastCaption = caption;
+    // each caption pops in, with a little overshoot
+    const k = Math.min(1, shown / 7);
+    await page.evaluate(([c, s]) => window.__cc.caption(c, s), [caption, k < 1 ? 0.4 + 0.75 * Math.sin(k * 2.2) : 1]);
+    // Standing still: keep one frame in five (one in two while the train goes by).
+    const waiting = state.cart.v < 2.5 && !state.over;
     wait = waiting ? wait + 1 : 0;
-    if (!waiting || wait % 5 === 0) await shoot(page);
+    if (!waiting || wait % (state.train ? 2 : 5) === 0) await shoot(page);
     if (state.mode === 'end') onEnd++;
     if (onEnd > END_CARD * FPS || state.t > 70) break;
   }

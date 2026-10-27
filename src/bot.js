@@ -6,7 +6,10 @@
 import { OBSTACLES, JUMPABLE, LIGHT_STOP, RAIL_STOP } from './world.js';
 import { wanted, isNeeded, lightPhase } from './game.js';
 
-/** opts.greedy: grab anything in reach and keep extras (for the trailer's staged race). */
+/**
+ * opts.greedy: grab anything in reach and keep extras; opts.runReds: no stopping
+ * at lights (both for the trailer's staged race).
+ */
 export function botSteer(g, skill = 1, opts = {}) {
   const c = g.cart;
   const w = g.world;
@@ -61,7 +64,7 @@ export function botSteer(g, skill = 1, opts = {}) {
     const e = ents[i];
     if (e.disabled) continue;
     // (the brake stops in v²/30 m: start a little before that, to stop just short of the line)
-    if (e.kind === 'light' && e.state === 'cycle' && lightPhase(g, e) !== 'green') {
+    if (!opts.runReds && e.kind === 'light' && e.state === 'cycle' && lightPhase(g, e) !== 'green') {
       const gap = e.y - LIGHT_STOP - c.y;
       if (gap > -0.3 && gap < (c.v * c.v) / 26 + 1.5) out.brake = true;
     }
@@ -91,14 +94,16 @@ export function botSteer(g, skill = 1, opts = {}) {
 
 /**
  * Ways to drive: 'bot' plays well; 'trailer' drives the staged race of the
- * trailer (it grabs anything, and lets the dog chase a little first).
+ * trailer (it grabs anything, runs the red, and lets the dog chase a little first).
  */
 export const POLICIES = {
   bot: (g) => botSteer(g),
   trailer: (g) => {
-    const out = botSteer(g, 1, { greedy: true });
+    const out = botSteer(g, 1, { greedy: true, runReds: true });
     // let the dog chase for a moment before it gets its treat
     if (out.drop && g.dogs.some((d) => d.state === 'chase' && d.t < 1.6)) out.drop = false;
+    // and let the warden close in for a moment, then get away
+    if (g.cops.some((p) => p.state === 'chase' && p.t > 3 && p.t < 3.4)) out.brake = true;
     return out;
   },
 };

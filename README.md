@@ -122,7 +122,7 @@ sovrapposto alle copertine):
 
 Il trailer (`scripts/trailer.mjs`) è registrato dal gioco vero, fotogramma per
 fotogramma: una sola gara preparata apposta (`scripts/trailer-stage.mjs`) e
-raccontata in ordine, con le scritte (prendi la lista, salta i lavori, sfama il
-cane, fermati al rosso, mai sfidare il treno, batti il tempo), il logo
-all'inizio e alla fine, e le attese al semaforo e al passaggio a livello
-accelerate.
+raccontata in ordine, un brivido dopo l'altro: la lista, il salto, il cane,
+il rosso passato sfiorando la folla col vigile alle calcagna, la frenata
+all'ultimo davanti al treno, lo sprint alla cassa col tempo. Scritte che
+cambiano a ogni momento, il logo all'inizio e alla fine, le soste accelerate.
