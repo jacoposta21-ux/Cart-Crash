@@ -76,6 +76,8 @@ export function botSteer(g, skill = 1) {
       if (!isNeeded(g, top) || c.v < 6) out.drop = true;
     }
   }
+  // Red light already run: keep the speed up while the warden is after us.
+  if (g.cops.some((p) => p.state === 'chase')) out.brake = false;
   // An extra on top of the pile: throw it away.
   const top = g.stack[g.stack.length - 1];
   if (top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;

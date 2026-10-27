@@ -15,23 +15,29 @@ più breve.
 | Frenare | ↓ oppure S | scorri in giù e tieni premuto |
 | Saltare | ↑, W oppure spazio | scorri in su |
 | Mollare l'oggetto in cima alla pila | E (o X) | pulsante **Molla** |
+| Liberare un palloncino | Q (o R) | pulsante **Libera** (compare quando hai palloncini) |
 | Pausa | Esc o P | pulsante ⏸ |
 
-- **La lista** (in alto) ha 7 cose diverse, circa 9 oggetti in tutto. Una cosa
-  conta solo se è in lista e solo fino al numero richiesto. Il resto occupa
-  spazio: oltre i 5,2 m di pila quello che prendi scivola via ("No room!").
-  Con **Molla** butti l'oggetto in cima per fare spazio.
-- **La cassa** compare 70 m più avanti appena nel carrello c'è tutta la lista.
-  Se prima di arrivarci perdi qualcosa della lista, la cassa sparisce finché non
-  lo riprendi. Il tempo con cui arrivi alla cassa è il punteggio; il record
-  (miglior tempo) resta sul dispositivo.
+- **La lista** (in alto) è nuova a ogni gara: 4 cose diverse, 2-3 di ciascuna
+  (1-2 angurie), circa 9 oggetti. Una cosa conta solo se è in lista e solo fino
+  al numero richiesto; oltre i 5,2 m di pila quello che prendi scivola via
+  ("No room!").
+- **La cassa** compare 70 m più avanti appena nel carrello c'è tutta la lista:
+  si vince solo così. Se prima di arrivarci perdi qualcosa della lista, la
+  cassa sparisce finché non lo riprendi.
+- **Punteggio** = tempo + **5 secondi per ogni oggetto extra** nel carrello
+  alla cassa (cose fuori lista o in più del richiesto; i palloncini non
+  contano). Con **Molla** butti l'oggetto in cima prima della cassa e non lo
+  paghi. Il record (punteggio più basso) resta sul dispositivo.
 - **Sei fuori** al terzo schianto (cassonetti, casse, coni, motorini,
   dissuasori, transenne, panchine, tubi, passanti) o se ti prende il **treno**.
   Dopo uno schianto hai 1,6 s di tregua.
 - **Semafori**: quando ti avvicini diventano gialli e poi rossi, e una folla
-  attraversa sulle strisce. Se passi la linea col rosso la folla ti fa cadere
-  **tutto** il carico (non perdi vite, ma devi riprendere la spesa). Frena e
-  aspetta il verde.
+  attraversa sulle strisce. Se col rosso **vai addosso a qualcuno**, quella
+  persona vola via e ti cade **tutto** il carico (non perdi vite, ma devi
+  riprendere la spesa). Se passi col rosso **senza toccare nessuno**, ti insegue
+  un **vigile** per 10 secondi: ti prende solo se rallenti, e la multa costa una
+  vita. Frena e aspetta il verde.
 - **Passaggi a livello**: campanella, sbarre giù, poi passa il treno. Se sei sui
   binari mentre passa, la gara è finita. Fermati alla linea.
 - **Cani**: quando passi vicino a un cane ti insegue. Se rallenti (per esempio a
@@ -44,7 +50,8 @@ più breve.
 | Oggetto | Effetto |
 |---|---|
 | Anguria | pesa: il carrello sterza più lento e scende più veloce |
-| Palloncini | alleggeriscono: piccoli salti che scavalcano buche e pozzanghere (non sono mai in lista) |
+| Palloncini | alleggeriscono: piccoli salti che scavalcano buche e pozzanghere; non sono mai in lista e non contano come extra; si liberano con Q / **Libera** |
+| Peperoncino | lo mangia il ragazzo: turbo per 3 secondi; non entra nel carrello |
 | Olio d'oliva | scivoli per circa 3 s; anche le pozzanghere d'olio fanno scivolare |
 | Spesa varia (cereali, carta igienica, pomodori, pane, formaggio, bibita, ananas, detersivo) | la pila cresce, ondeggia quando sterzi e se pende troppo l'oggetto in cima cade |
 | Uova | si rompono sui colpi forti (buche, atterraggi, schianti) |

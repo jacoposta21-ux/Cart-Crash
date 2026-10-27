@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, step, drainEvents, handling, jolt, result, makeList, listProgress, listDone, isNeeded, extras,
-  LIVES, RIM, MAX_PILE, EXTRA_PENALTY, stackHeight, itemKey,
+  LIVES, RIM, MAX_PILE, EXTRA_PENALTY, stackHeight, itemKey, crowdPeople, lightPhase,
 } from '../src/game.js';
 import { botSteer } from '../src/bot.js';
 
@@ -91,15 +91,15 @@ test('every extra thing in the cart at the checkout adds 5 seconds', () => {
   add(g, { type: 'goods', goods: 'cheese' }); // not on the list
   add(g, { type: 'goods', goods: 'bread' });
   add(g, { type: 'goods', goods: 'bread' }); // one too many
-  g.balloons.push({ color: 0 }); // balloons are extras too
-  assert.equal(extras(g), 3);
+  g.balloons.push({ color: 0 }); // balloons are not extras
+  assert.equal(extras(g), 2);
   run(g, 15);
   assert.equal(g.won, true);
   const r = result(g);
   assert.equal(EXTRA_PENALTY, 5);
-  assert.equal(r.extras, 3);
-  assert.equal(r.penalty, 15);
-  assert.ok(Math.abs(r.total - (r.time + 15)) < 1e-9);
+  assert.equal(r.extras, 2);
+  assert.equal(r.penalty, 10);
+  assert.ok(Math.abs(r.total - (r.time + 10)) < 1e-9);
 });
 
 test('dropping an extra before the checkout saves its 5 seconds', () => {
@@ -185,21 +185,71 @@ test('a dog cannot catch a cart that keeps rolling', () => {
   assert.equal(ev.filter((e) => e.type === 'bite').length, 0);
 });
 
-test('running a red light knocks everything out of the cart; stopping keeps it', () => {
-  const a = emptyGame(), b = emptyGame();
-  for (const g of [a, b]) {
-    for (let i = 0; i < 4; i++) add(g, { type: 'goods', goods: 'can' });
-    put(g, { kind: 'light', x: 0, y: 90, state: 'idle', willRed: true, crowd: 5 });
+test('stopping at a red light keeps the load, and you go on when it turns green', () => {
+  const g = emptyGame();
+  for (let i = 0; i < 4; i++) add(g, { type: 'goods', goods: 'can' });
+  put(g, { kind: 'light', x: 0, y: 90, state: 'idle', willRed: true, crowd: 6 });
+  const ev = run(g, 16, (gg) => ({ steer: 0, brake: botSteer(gg).brake }));
+  assert.ok(ev.some((e) => e.type === 'yellow'));
+  assert.ok(ev.some((e) => e.type === 'red'));
+  assert.equal(ev.filter((e) => e.type === 'ranred' || e.type === 'crowdhit' || e.type === 'cop').length, 0);
+  assert.equal(g.stack.length, 4);
+  assert.ok(g.cart.y > 95);
+});
+
+test('riding into the crowd on the crossing knocks everything out of the cart', () => {
+  const g = emptyGame();
+  for (let i = 0; i < 4; i++) add(g, { type: 'goods', goods: 'can' });
+  const light = put(g, { kind: 'light', x: 0, y: 90, state: 'idle', willRed: true, crowd: 6 });
+  // Stop at the line like the bot, until someone is in the middle of the crossing, then aim at them.
+  let person = null;
+  for (let i = 0; i < 20 / DT && !person; i++) {
+    step(g, DT, { steer: 0, brake: botSteer(g).brake });
+    if (lightPhase(g, light) === 'red' && g.cart.v < 0.5) person = crowdPeople(g, light).find((p) => p.walking && Math.abs(p.x - g.world.center(p.y)) < 1.5);
   }
-  const evA = run(a, 12);
-  assert.ok(evA.some((e) => e.type === 'yellow'));
-  assert.ok(evA.some((e) => e.type === 'ranred'));
+  assert.ok(person, 'someone is crossing');
+  g.cart.x = person.x; g.cart.y = person.y - 0.45; g.cart.v = 3;
+  const ev = run(g, 0.1, { brake: true });
+  assert.ok(ev.some((e) => e.type === 'crowdhit'));
+  assert.equal(g.stack.length, 0);
+  run(g, 3);
+  assert.equal(g.cops.length, 0, 'no warden after hitting the crowd');
+});
+
+test('running a red light past nobody brings the warden: he catches you only if you slow down', () => {
+  const chase = (brakeAfter) => {
+    const g = emptyGame();
+    put(g, { kind: 'light', x: 0, y: 90, state: 'idle', willRed: true, crowd: 0 });
+    const ev = run(g, 22, (gg) => ({ steer: 0, brake: brakeAfter && gg.cops.length > 0 && gg.cops[0].t > brakeAfter }));
+    return { g, ev };
+  };
+  const fast = chase(0);
+  assert.ok(fast.ev.some((e) => e.type === 'ranred'));
+  assert.ok(fast.ev.some((e) => e.type === 'cop'));
+  assert.ok(fast.ev.some((e) => e.type === 'copgaveup'), 'he gives up after 10 s');
+  assert.equal(fast.ev.filter((e) => e.type === 'caught').length, 0);
+  assert.equal(fast.g.lives, LIVES);
+  const slow = chase(0.5);
+  assert.ok(slow.ev.some((e) => e.type === 'caught'));
+  assert.equal(slow.g.lives, LIVES - 1);
+});
+
+test('balloons can be let go one at a time', () => {
+  const g = emptyGame();
+  g.balloons.push({ color: 0 }, { color: 1 });
+  const ev = run(g, DT, { release: true });
+  assert.ok(ev.some((e) => e.type === 'release'));
+  assert.equal(g.balloons.length, 1);
+});
+
+test('a chili pepper gives a burst of speed and never goes in the cart', () => {
+  const a = emptyGame(), b = emptyGame();
+  run(a, 3); run(b, 3);
+  put(a, { kind: 'item', type: 'chili', x: a.cart.x, y: a.cart.y + 0.4 });
+  run(a, 1.5); run(b, 1.5);
+  assert.ok(a.cart.v > b.cart.v + 3, `${a.cart.v} vs ${b.cart.v}`);
   assert.equal(a.stack.length, 0);
-  const evB = run(b, 14, (g) => ({ steer: 0, brake: botSteer(g).brake }));
-  assert.ok(evB.some((e) => e.type === 'red'));
-  assert.equal(evB.filter((e) => e.type === 'ranred').length, 0);
-  assert.equal(b.stack.length, 4);
-  assert.ok(b.cart.y > 95, 'goes on when it turns green');
+  assert.equal(extras(a), 0);
 });
 
 test('the train ends the ride; waiting at the barrier is safe', () => {

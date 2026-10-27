@@ -134,6 +134,15 @@ export function makeItem(it) {
       break;
     }
     case 'balloon': g.add(makeBalloon(it.color ?? 0)); break;
+    case 'chili': {
+      const body = mesh(cone(0.11, 0.55, 8), mat('#e5231b'), 0, 0.12, 0);
+      body.rotation.z = Math.PI / 2 + 0.25;
+      g.add(body);
+      const stem = mesh(cyl(0.03, 0.05, 0.12, 6), mat('#3c9a3c'), 0.3, 0.2, 0);
+      stem.rotation.z = Math.PI / 2;
+      g.add(stem);
+      break;
+    }
     case 'goods': g.add((GOODS_MAKERS[it.goods] || GOODS_MAKERS.cereal)()); break;
     default: break;
   }
@@ -400,6 +409,22 @@ export function makeTrain() {
   g.add(mesh(box(1.2, 2.2, 2.7), mat('#2a9d8f'), 0.4, 1.7, 0));
   g.add(mesh(box(0.1, 0.25, 0.4), mat('#fffbe0', { basic: true }), 1.02, 1.2, -0.8));
   g.add(mesh(box(0.1, 0.25, 0.4), mat('#fffbe0', { basic: true }), 1.02, 1.2, 0.8));
+  return g;
+}
+
+/** The traffic warden: white helmet, blue uniform, a whistle. Animated like a walker. */
+export function makeCop() {
+  const look = 4; // no bag, no hat
+  const g = makeWalker(look);
+  const shirt = mat(SHIRT[look % SHIRT.length]), pants = mat(PANTS[(look >> 2) % PANTS.length]);
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.material === shirt) o.material = mat('#1d3f8f');
+    else if (o.material === pants) o.material = mat('#16264f');
+  });
+  g.add(mesh(cyl(0.2, 0.2, 0.16, 12), mat('#ffffff'), 0, 1.86, 0));
+  g.add(mesh(cyl(0.26, 0.26, 0.03, 12), mat('#ffffff'), 0, 1.79, 0));
+  g.add(mesh(box(0.46, 0.08, 0.27), mat('#ffffff'), 0, 1.2, 0)); // the white belt
   return g;
 }
 

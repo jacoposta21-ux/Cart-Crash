@@ -308,3 +308,13 @@ html, body {
 }
 
 .chip.extra { background: #ffd5d5; color: #8b1e2d; padding-left: 10px; }
+
+/* "Let go" (balloons) sits next to "Drop" */
+.release-btn { background: rgba(255, 130, 160, 0.96); box-shadow: 0 4px 0 #c24a6b; transform: translateX(calc(-50% + 120px)); min-width: 0; }
+.release-btn:active { transform: translateX(calc(-50% + 120px)) translateY(2px); }
+.poster .release-btn { display: none !important; }
+@media (max-height: 500px) and (orientation: landscape) {
+  .release-btn { left: auto; right: 16px; bottom: calc(172px + var(--safe-b)); transform: none; }
+  .release-btn:active { transform: translateY(2px); }
+}
+.chip.cop { background: #1d3f8f; color: #fff; animation: none; }

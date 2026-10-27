@@ -3,12 +3,12 @@
 // people, pigeons, dogs, traffic lights, trains, the checkout, flying debris
 // and little effects).
 import * as THREE from '../vendor/three/three.module.min.js';
-import { itemHeight, stackHeight, wanted, lightPhase, trainSpan, railBarrierDown } from './game.js';
+import { itemHeight, stackHeight, wanted, lightPhase, trainSpan, railBarrierDown, crowdPeople } from './game.js';
 import { OBSTACLES, SECTION, LIGHT_STOP, RAIL_STOP } from './world.js';
 import { buildSection } from './town.js';
 import {
   makeItem, makeBalloon, makeCart, makeObstacle, makeWalker, animateWalker, makePigeon, makeDog, animateDog,
-  makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain,
+  makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain, makeCop,
 } from './models.js';
 
 const SKY = '#a8dcf5';
@@ -36,6 +36,7 @@ export function createRenderer(canvas, fxLayer) {
     pile: new Map(),
     balloons: [],
     dogs: new Map(),
+    cops: new Map(),
     checkout: null,
     dropping: new Set(),
     label: (s) => s,
@@ -80,6 +81,8 @@ export function setGame(R, g) {
   if (R.cart) R.scene.remove(R.cart.root);
   for (const d of R.dogs.values()) R.scene.remove(d);
   R.dogs.clear();
+  for (const p of R.cops.values()) R.scene.remove(p);
+  R.cops.clear();
   if (R.checkout) { R.scene.remove(R.checkout); R.checkout = null; }
   R.dropping.clear();
   R.pile.clear();
@@ -116,15 +119,24 @@ export function onEvents(R, g, events, label) {
     const c = g.cart;
     switch (e.type) {
       case 'pickup':
-        text(R, g, c.x, c.y, 2.6, e.wanted ? '✓' : '+5s', label('pickup', e), e.wanted ? 'good' : 'bad');
-        burst(R, g, e.x, e.y, 0.6, e.wanted ? 14 : 6, e.wanted ? ['#3ddc84', '#ffffff', '#ffd23f'] : ['#ffffff', '#cccccc'], 3);
+        if (e.item === 'chili') {
+          text(R, g, c.x, c.y, 2.6, '🔥', label('pickup', e), 'good');
+          burst(R, g, c.x, c.y + 0.6, 2.2, 18, ['#ff3b1f', '#ff9f1c', '#ffd23f'], 3);
+        } else if (e.item === 'balloon') {
+          text(R, g, c.x, c.y, 2.6, '', label('pickup', e), 'meh');
+        } else {
+          text(R, g, c.x, c.y, 2.6, e.wanted ? '✓' : '+5s', label('pickup', e), e.wanted ? 'good' : 'bad');
+          burst(R, g, e.x, e.y, 0.6, e.wanted ? 14 : 6, e.wanted ? ['#3ddc84', '#ffffff', '#ffd23f'] : ['#ffffff', '#cccccc'], 3);
+        }
         if (e.wanted) R.cart.cheer = 1;
         break;
       case 'drop': R.dropping.add(e.item.id); text(R, g, c.x, c.y, 2.4, '', label('drop', e), 'meh'); break;
-      case 'ranred':
-        bump(R, 0.5);
-        text(R, g, c.x, c.y, 3.6, label('ranred', e), '', 'bad big');
+      case 'crowdhit':
+        bump(R, 0.55);
+        burst(R, g, e.x, e.y, 1, 16, ['#d8ccb4', '#ffffff', '#ffd23f'], 4);
+        text(R, g, c.x, c.y, 3.6, label('crowdhit', e), '', 'bad big');
         break;
+      case 'caught': bump(R, 0.35); text(R, g, c.x, c.y, 3.2, label('caught', e), '', 'bad big'); break;
       case 'bite': bump(R, 0.35); text(R, g, c.x, c.y, 3.2, label('bite', e), '', 'bad big'); break;
       case 'listdone': R.cart.cheer = 1.5; burst(R, g, c.x, c.y, 2.5, 30, ['#3ddc84', '#ffd23f', '#ffffff', '#3fb6ff'], 5); break;
       case 'checkout':
@@ -188,6 +200,7 @@ export function render(R, g, dt) {
   syncEntities(R, g);
   syncCart(R, g, dt);
   syncDogs(R, g);
+  syncCops(R, g);
   syncCheckout(R, g);
   updateDebris(R, g, dt);
   updateParts(R, dt);
@@ -446,7 +459,7 @@ function syncCart(R, g, dt) {
   while (R.balloons.length > g.balloons.length) {
     const b = R.balloons.pop();
     body.remove(b.obj, b.line);
-    if (g.over) {
+    {
       b.obj.updateWorldMatrix(true, false);
       b.obj.matrixWorld.decompose(b.obj.position, b.obj.quaternion, b.obj.scale);
       R.scene.add(b.obj);
@@ -523,6 +536,28 @@ function syncDogs(R, g) {
   }
 }
 
+function syncCops(R, g) {
+  const live = new Set(g.cops);
+  for (const [p, obj] of R.cops) if (!live.has(p)) { R.scene.remove(obj); R.cops.delete(p); }
+  for (const p of g.cops) {
+    let obj = R.cops.get(p);
+    if (!obj) {
+      obj = new THREE.Group();
+      const body = makeCop();
+      obj.add(makeShadow(0.4), body);
+      obj.userData.body = body;
+      R.scene.add(obj);
+      R.cops.set(p, obj);
+    }
+    obj.position.copy(worldPos(g, p.x, p.y));
+    const body = obj.userData.body;
+    body.rotation.y = p.state === 'chase' ? Math.PI : p.caught ? Math.PI : 0;
+    animateWalker(body, p.run * 12, p.state === 'chase');
+    // one arm up, whistling
+    if (p.state === 'chase') body.userData.armR.rotation.x = -2.6 + Math.sin(R.t * 14) * 0.2;
+  }
+}
+
 // ---------- zebra crossing with traffic lights ----------
 function buildCrossing(g, e) {
   const grp = new THREE.Group();
@@ -553,22 +588,28 @@ function buildCrossing(g, e) {
 
 function updateCrossing(R, g, e, obj) {
   const grp = obj.children[0];
-  const { lights, crowd, hw } = grp.userData;
+  const { lights, crowd } = grp.userData;
   obj.position.x = g.world.center(e.y);
   const phase = e.disabled ? 'green' : lightPhase(g, e);
   for (const tl of lights) for (const k of ['red', 'yellow', 'green']) tl.userData.lamps[k].color.set(k === phase ? LAMP_ON[k] : '#333333');
-  // During the red, a crowd crosses from both sides.
-  const t = e.state === 'cycle' ? g.t - e.t0 - 1.4 : -1;
+  // During the red, a crowd crosses from both sides (the same people the cart can run into).
+  const people = crowdPeople(g, e);
   crowd.forEach((p, i) => {
-    const dir = i % 2 ? 1 : -1;
-    const delay = (i * 0.37) % 1.2;
-    const speed = 1.6 + (i % 3) * 0.25;
-    const x = -dir * (hw + 1.5) + dir * speed * (t - delay);
-    p.visible = t > delay && Math.abs(x) < hw + 1.6;
-    p.position.set(x, 0, -1 - 1.2 + (i % 4) * 0.7);
-    p.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
-    if (e.ranRed && g.cart.y > e.y - LIGHT_STOP) p.rotation.z = Math.sin(i + R.t * 9) * 0.25; // shaking fists
-    animateWalker(p, (t - delay) * 9, true);
+    const q = people[i];
+    if (!q) { p.visible = false; return; }
+    p.visible = q.visible;
+    p.position.set(q.x - obj.position.x, 0, -(q.y - e.y));
+    p.rotation.set(0, q.dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0);
+    if (q.knocked) {
+      const k = Math.min(1.2, g.t - q.knocked.t);
+      p.position.x += q.knocked.dir * 2.2 * k;
+      p.position.y = Math.max(0, 3 * k - 3 * k * k);
+      p.rotation.z = -q.knocked.dir * Math.min(1.4, k * 4);
+      animateWalker(p, 0, false);
+      return;
+    }
+    if (e.crowdHit && g.cart.y > e.y - LIGHT_STOP) p.rotation.z = Math.sin(i + R.t * 9) * 0.2; // shaking fists
+    animateWalker(p, q.phase, q.walking);
   });
 }
 

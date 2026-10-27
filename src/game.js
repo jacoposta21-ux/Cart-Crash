@@ -14,6 +14,7 @@ export const ITEMS = {
   balloon: { value: 15, weight: -0.35, h: 0 },
   oil: { value: 20, weight: 0.45, h: 0.62 },
   eggs: { value: 40, weight: 0.15, h: 0.3 },
+  chili: { value: 0, weight: 0, h: 0 }, // eaten on the spot: never in the cart
 };
 export const GOODS_H = { cereal: 0.62, roll: 0.46, can: 0.38, bread: 0.34, cheese: 0.32, soda: 0.56, pineapple: 0.62, detergent: 0.54 };
 export const itemHeight = (it) => (it.type === 'goods' ? GOODS_H[it.goods] : ITEMS[it.type].h);
@@ -33,7 +34,7 @@ const BRAKE = 15; // m/s² of braking
 const CHECKOUT_AHEAD = 70;
 // Traffic lights: yellow, then red while a crowd crosses.
 export const YELLOW_TIME = 1.4;
-export const RED_TIME = 4.6;
+export const RED_TIME = 5.0;
 // Level crossings: bells and barriers, then the train goes by.
 export const RAIL_WARN = 2.4;
 export const TRAIN_TIME = 3.4;
@@ -41,6 +42,10 @@ export const TRAIN_LENGTH = 58;
 export const TRAIN_SPEED = 24;
 // Dogs.
 const DOG_SPEED = 10.5;
+// The traffic warden: runs after you for 10 s when you run a red light without hitting anyone.
+export const COP_SPEED = 11;
+export const COP_TIME = 10;
+const CHILI_TIME = 3;
 const DOG_GIVE_UP = 28;
 
 const LIST_POOL = ['melon', 'oil', 'eggs', ...GOODS];
@@ -79,7 +84,7 @@ export function createGame(seed, opts = {}) {
     checkoutY: null,
     next: 0, // first entity not yet behind the cart
     rand: rng(seed ^ 0x9e3779b9),
-    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false },
+    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false, chili: 0 },
     stack: [], // bottom first: { type, goods?, h, id }
     balloons: [], // { color }
     tilt: 0,
@@ -90,6 +95,7 @@ export function createGame(seed, opts = {}) {
     dropped: 0,
     lost: [], // items that fell off, broke, popped or were knocked out
     dogs: [], // { x, y, t, look, run, state: 'chase' | 'eat' | 'leave', bit }
+    cops: [], // { x, y, t, run, state: 'chase' | 'leave' }
     events: [],
   };
 }
@@ -105,8 +111,8 @@ export function listProgress(g) {
   return g.list.map((l) => ({ ...l, have: Math.min(l.need, have[l.key] || 0) }));
 }
 export const listDone = (g) => listProgress(g).every((l) => l.have >= l.need);
-/** Things in the cart beyond the list: junk, one too many, and balloons. */
-export const extras = (g) => g.stack.filter((it) => !isNeeded(g, it)).length + g.balloons.length;
+/** Things in the cart beyond the list: junk and one too many (balloons do not count). */
+export const extras = (g) => g.stack.filter((it) => !isNeeded(g, it)).length;
 export const listCount = (g) => listProgress(g).reduce((a, l) => [a[0] + l.have, a[1] + l.need], [0, 0]);
 /** Is one more of this wanted right now? */
 export function wanted(g, key) {
@@ -139,7 +145,8 @@ export function handling(g) {
 
 /** Rolling speed: faster on steep bits, with a heavy cart, and the further you get. */
 export function targetSpeed(g, kind) {
-  return 8 + 4.2 * SECTION[kind].pace + Math.min(8, g.distance / 150) + 0.35 * Math.min(mass(g) - 1, 6);
+  const base = 8 + 4.2 * SECTION[kind].pace + Math.min(8, g.distance / 150) + 0.35 * Math.min(mass(g) - 1, 6);
+  return g.cart.chili > 0 ? base * 1.35 + 2 : base;
 }
 
 function emit(g, type, data = {}) {
@@ -179,6 +186,12 @@ function pickUp(g, e) {
   if (e.type === 'balloon') {
     g.balloons.push({ color: e.color ?? 0 });
     emit(g, 'pickup', { item: 'balloon', key: 'balloon', x: e.x, y: e.y, wanted: false });
+    return;
+  }
+  if (e.type === 'chili') {
+    // The rider eats it: a burst of speed.
+    g.cart.chili = CHILI_TIME;
+    emit(g, 'pickup', { item: 'chili', key: 'chili', x: e.x, y: e.y, wanted: false });
     return;
   }
   const it = { type: e.type, h: 0, id: e.id };
@@ -283,6 +296,7 @@ export function step(g, dt, input = 0) {
     }
     if (c.z > 0) { c.vz -= GRAVITY * dt; c.z = Math.max(0, c.z + c.vz * dt); }
     stepDogs(g, dt);
+    stepCops(g, dt);
     return;
   }
   w.ensure(c.y + 160);
@@ -293,7 +307,8 @@ export function step(g, dt, input = 0) {
   const target = targetSpeed(g, sec.kind);
   c.braking = Boolean(inp.brake);
   if (c.braking) c.v = Math.max(0, c.v - BRAKE * (c.z <= 0.02 ? 1 : 0.5) * dt);
-  else c.v += (target - c.v) * Math.min(1, (c.v < 5 ? 1.6 : 1.1) * dt);
+  else c.v += (target - c.v) * Math.min(1, (c.v < 5 || c.chili > 0 ? 2.2 : 1.1) * dt);
+  if (c.chili > 0) c.chili -= dt;
   const dy = c.v * dt;
   c.y += dy;
   g.distance = c.y;
@@ -337,6 +352,10 @@ export function step(g, dt, input = 0) {
     }
   }
   if (inp.drop) drop(g);
+  if (inp.release && g.balloons.length) {
+    const b = g.balloons.pop();
+    emit(g, 'release', { color: b.color });
+  }
 
   // The road's edges: curbs, walls and market stalls bounce the cart back.
   c.curbCd -= dt;
@@ -393,6 +412,7 @@ export function step(g, dt, input = 0) {
     }
   }
   stepDogs(g, dt);
+  stepCops(g, dt);
   if (g.over) return;
 
   // What the cart touches.
@@ -474,6 +494,29 @@ export function lightPhase(g, e) {
   return 'green';
 }
 
+/**
+ * The people crossing at a light: where each one is right now (world x, y),
+ * or null when they are not on the street. They cross during the red.
+ */
+export function crowdPeople(g, e) {
+  if (e.state !== 'cycle') return [];
+  const w = g.world;
+  const hw = w.halfWidth(e.y);
+  const cx = w.center(e.y);
+  const t = g.t - e.t0 - YELLOW_TIME;
+  const out = [];
+  for (let i = 0; i < e.crowd; i++) {
+    const dir = i % 2 ? 1 : -1;
+    const delay = (i * 0.23) % 0.7;
+    const speed = 2.1 + (i % 3) * 0.3;
+    const knocked = e.knocked?.[i];
+    const local = -dir * (hw + 1) + dir * speed * (t - delay);
+    const onStreet = t > delay && Math.abs(local) < hw + 1.1;
+    out.push({ i, dir, x: cx + local, y: e.y + 2.2 - (i % 4) * 0.7, walking: onStreet && !knocked, visible: onStreet || Boolean(knocked), phase: (t - delay) * 9, knocked });
+  }
+  return out;
+}
+
 function stepLight(g, e) {
   const c = g.cart;
   const stopY = e.y - LIGHT_STOP;
@@ -484,16 +527,31 @@ function stepLight(g, e) {
     if (eta < YELLOW_TIME + 1.6 && stopY > c.y) { e.state = 'cycle'; e.t0 = g.t; emit(g, 'yellow', { y: e.y }); }
   }
   if (e.state === 'cycle' && !e.redSaid && lightPhase(g, e) === 'red') { e.redSaid = true; emit(g, 'red', { y: e.y }); }
-  // Crossing the stop line on red: the crowd knocks everything out of the cart.
   if (!e.passed && c.y >= stopY) {
     e.passed = true;
-    if (e.state === 'cycle' && lightPhase(g, e) === 'red') {
-      e.ranRed = true;
+    if (e.state === 'cycle' && lightPhase(g, e) === 'red') { e.ranRed = true; emit(g, 'ranred', {}); }
+  }
+  // Riding into the crowd knocks everything out of the cart.
+  if (e.state === 'cycle' && !e.crowdHit && Math.abs(c.y - (e.y + 1)) < 2.5) {
+    for (const p of crowdPeople(g, e)) {
+      if (!p.walking || Math.abs(p.x - c.x) > 0.75 || Math.abs(p.y - c.y) > 0.6 || c.z > 1.6) continue;
+      e.crowdHit = true;
+      e.knocked = e.knocked || {};
+      e.knocked[p.i] = { t: g.t, dir: Math.sign(p.x - c.x) || 1 };
       const n = g.stack.length;
       while (g.stack.length) loseTop(g, 'crowd', g.rand() < 0.5 ? -1 : 1);
-      emit(g, 'ranred', { lost: n });
-      c.v *= 0.6;
+      emit(g, 'crowdhit', { lost: n, x: p.x, y: p.y });
+      c.v *= 0.5;
+      c.vx = -Math.sign(p.x - c.x || 1) * 3;
+      break;
     }
+  }
+  // Through the red without touching anyone: the traffic warden saw you.
+  if (e.ranRed && !e.crowdHit && !e.copSent && c.y > e.y + 3) {
+    e.copSent = true;
+    const side = g.rand() < 0.5 ? -1 : 1;
+    g.cops.push({ x: g.world.center(e.y) + side * (g.world.halfWidth(e.y) + 0.8), y: e.y - LIGHT_STOP, t: 0, run: 0, state: 'chase' });
+    emit(g, 'cop', {});
   }
 }
 
@@ -569,6 +627,28 @@ function stepDogs(g, dt) {
     }
   }
   g.dogs = g.dogs.filter((d) => d.y > c.y - 40 && Math.abs(d.x - g.world.center(d.y)) < 14);
+}
+
+// ---------- the traffic warden ----------
+function stepCops(g, dt) {
+  const c = g.cart;
+  for (const p of g.cops) {
+    p.t += dt;
+    p.run += dt;
+    if (p.state === 'chase') {
+      p.y += COP_SPEED * dt;
+      p.x += (c.x - p.x) * Math.min(1, dt * 3);
+      if (!g.over && c.y - p.y < 0.8 && c.y > p.y && Math.abs(c.x - p.x) < 1.1) {
+        // Caught: a fine that costs a life.
+        p.state = 'leave';
+        p.caught = true;
+        emit(g, 'caught', { lives: g.lives - 1 });
+        if (c.safe <= 0) loseLife(g, 'cop');
+        c.safe = Math.max(c.safe, SAFE_TIME);
+      } else if (p.t > COP_TIME) { p.state = 'leave'; emit(g, 'copgaveup', {}); }
+    }
+  }
+  g.cops = g.cops.filter((p) => p.y > c.y - 45);
 }
 
 /** Pops this step's events (for sound and effects). */

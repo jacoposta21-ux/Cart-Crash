@@ -124,6 +124,15 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   await frames(page, 2);
   check(await page.evaluate(() => window.__cc.game.stack.length) === n0 - 1, `${name}: drop throws the top thing away`);
 
+  // Let a balloon go.
+  await page.evaluate(() => { window.__cc.game.balloons.push({ color: 1 }, { color: 2 }); });
+  await frames(page, 2);
+  check(await visible(page, '#btn-release'), `${name}: the Let go button shows with balloons`);
+  if (touch) await page.tap('#btn-release'); else await page.keyboard.press('KeyQ');
+  await frames(page, 2);
+  check(await page.evaluate(() => window.__cc.game.balloons.length) === 1, `${name}: one balloon let go`);
+  await audit(page, `${name} ride with balloons`);
+
   await page.evaluate(() => window.__cc.run(25));
   await frames(page, 10);
   const hud = await page.evaluate(() => ({ time: document.querySelector('#hud-time').textContent, list: document.querySelectorAll('#hud-list li').length, goal: document.querySelector('#hud-goal').textContent, lives: document.querySelectorAll('#hud-lives .life').length }));
