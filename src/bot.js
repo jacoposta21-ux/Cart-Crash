@@ -6,7 +6,8 @@
 import { OBSTACLES, JUMPABLE, LIGHT_STOP, RAIL_STOP } from './world.js';
 import { wanted, isNeeded, lightPhase } from './game.js';
 
-export function botSteer(g, skill = 1) {
+/** opts.greedy: grab anything in reach and keep extras (for the trailer's staged race). */
+export function botSteer(g, skill = 1, opts = {}) {
   const c = g.cart;
   const w = g.world;
   const ents = w.entities;
@@ -19,7 +20,7 @@ export function botSteer(g, skill = 1) {
     if (dy < 0.6 || e.taken || e.kind !== 'item') continue;
     const key = e.type === 'goods' ? e.goods : e.type;
     const want = wanted(g, key);
-    if (!want) continue;
+    if (!want && !opts.greedy) continue;
     const reach = Math.abs(e.x - c.x) / Math.max(dy, 0.5);
     if (reach > 1.4) continue;
     const score = 3 - dy * 0.12 - reach;
@@ -27,7 +28,7 @@ export function botSteer(g, skill = 1) {
   }
   for (let i = g.next; i < ents.length && ents[i].y < c.y + 8; i++) {
     const e = ents[i];
-    if (e.kind === 'item' && e.y > c.y + 0.5 && (e.type === 'balloon' || !wanted(g, e.type === 'goods' ? e.goods : e.type)) && Math.abs(targetX - e.x) < 0.9) {
+    if (!opts.greedy && e.kind === 'item' && e.y > c.y + 0.5 && (e.type === 'balloon' || !wanted(g, e.type === 'goods' ? e.goods : e.type)) && Math.abs(targetX - e.x) < 0.9) {
       targetX = e.x + (targetX >= e.x ? 1 : -1) * 1.1; // keep extras out of the cart
       continue;
     }
@@ -59,13 +60,14 @@ export function botSteer(g, skill = 1) {
   for (let i = Math.max(0, g.next - 4); i < ents.length && ents[i].y < c.y + 60; i++) {
     const e = ents[i];
     if (e.disabled) continue;
+    // (the brake stops in v²/30 m: start a little before that, to stop just short of the line)
     if (e.kind === 'light' && e.state === 'cycle' && lightPhase(g, e) !== 'green') {
       const gap = e.y - LIGHT_STOP - c.y;
-      if (gap > -0.3 && gap < (c.v * c.v) / 22 + 6) out.brake = true;
+      if (gap > -0.3 && gap < (c.v * c.v) / 26 + 1.5) out.brake = true;
     }
     if (e.kind === 'rail' && e.state === 'warn' && g.t - e.t0 < 2.4 + 3.4 + 0.4) {
       const gap = e.y - RAIL_STOP - c.y;
-      if (gap > -2 && gap < (c.v * c.v) / 22 + 7) out.brake = true;
+      if (gap > -2 && gap < (c.v * c.v) / 26 + 2) out.brake = true;
     }
   }
   // A dog close behind and slowing down: throw it the top thing unless that is on the list.
@@ -80,7 +82,7 @@ export function botSteer(g, skill = 1) {
   if (g.cops.some((p) => p.state === 'chase')) out.brake = false;
   // An extra on top of the pile: throw it away.
   const top = g.stack[g.stack.length - 1];
-  if (top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;
+  if (!opts.greedy && top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;
   const err = targetX - c.x - c.vx * 0.12;
   const dead = 0.12 + (1 - skill) * 0.4;
   out.steer = Math.abs(err) < dead ? 0 : Math.max(-1, Math.min(1, err * 1.6));
@@ -88,15 +90,15 @@ export function botSteer(g, skill = 1) {
 }
 
 /**
- * Ways to drive for the trailer: 'bot' plays well; 'runred' plays well except
- * that it rides straight through red lights (to show the crowd and the warden).
+ * Ways to drive: 'bot' plays well; 'trailer' drives the staged race of the
+ * trailer (it grabs anything, and lets the dog chase a little first).
  */
 export const POLICIES = {
   bot: (g) => botSteer(g),
-  runred: (g) => {
-    const out = botSteer(g);
-    const light = g.world.entities.find((e) => e.kind === 'light' && e.state === 'cycle' && !e.passed && e.y > g.cart.y);
-    if (light) { out.brake = false; out.steer = 0; }
+  trailer: (g) => {
+    const out = botSteer(g, 1, { greedy: true });
+    // let the dog chase for a moment before it gets its treat
+    if (out.drop && g.dogs.some((d) => d.state === 'chase' && d.t < 1.6)) out.drop = false;
     return out;
   },
 };

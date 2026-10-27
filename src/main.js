@@ -540,6 +540,30 @@ if (TEST) {
       }
     },
     handling: () => handling(game),
+    /** Replaces the race ahead with a staged one (for the trailer): a list and a set of things at given distances. */
+    stage({ list, things }) {
+      game.list = list;
+      game.world.wanted = list.map((l) => l.key);
+      game.world.ensure(520);
+      game.world.clear(12, 470);
+      for (const e of things) {
+        const w = game.world;
+        const x = w.center(e.y) + (e.dx || 0) * (e.kind === 'dog' ? w.halfWidth(e.y) + 0.6 : 1);
+        const ent = { id: w.nextId++, x, ...e };
+        delete ent.dx;
+        if (ent.type === 'walker') ent.x = w.center(e.y) + ent.side * (w.halfWidth(e.y) + 1.2);
+        if (ent.type === 'barrier') ent.w = 1.0;
+        w.entities.push(ent);
+      }
+      game.world.entities.sort((a, b) => a.y - b.y);
+      buildList();
+      updateHud(true);
+    },
+    caption(text) {
+      const el = document.getElementById('caption');
+      el.textContent = text || '';
+      el.hidden = !text;
+    },
     portalMuted: () => audio.isPortalMuted(),
     /** A still for covers and icons: a ride `seconds` in, without the HUD, with the logo if `title`. */
     poster(seconds, title, closeup = false) {

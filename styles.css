@@ -319,3 +319,18 @@ html, body {
 
 /* trailer recording: no tips over the action */
 .clean .hint { display: none !important; }
+
+/* trailer: captions and the logo cards (test builds only) */
+.clean .drop-btn, .clean .toast { display: none !important; }
+.caption {
+  position: fixed; left: 50%; bottom: 9%; z-index: 16; transform: translateX(-50%) rotate(-2deg); pointer-events: none;
+  max-width: 92vw; padding: 0.35em 0.8em; border-radius: 0.5em; text-align: center; white-space: nowrap;
+  font-family: var(--display); font-size: clamp(2rem, 6.2vmin, 4.6rem); color: #fff; background: var(--red);
+  box-shadow: 0 0.12em 0 var(--ink), 0 0.4em 1.2em rgba(0, 0, 0, 0.3); -webkit-text-stroke: 1.5px var(--ink);
+}
+.trailer-card {
+  position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vmin;
+  background: radial-gradient(circle at 50% 40%, #fff6e5 0%, #ffd23f 55%, #f4a261 100%);
+}
+.trailer-card img { width: auto; height: 62vmin; filter: drop-shadow(0 2vmin 4vmin rgba(0, 0, 0, 0.3)); }
+.trailer-card p { margin: 0; font-family: var(--display); font-size: 5.4vmin; color: var(--ink); text-align: center; padding: 0 4vw; }
