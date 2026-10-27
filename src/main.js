@@ -1,10 +1,8 @@
 // Cart Crash: screens, input, the game loop, records and the CrazyGames hooks.
 import { BUILD } from './build.js';
-import { createGame, step, drainEvents, result, cartValue, progress, count, handling, ITEMS } from './game.js';
-import { hashString } from './track.js';
-import { createView, resizeView, onEvents, render } from './render.js';
+import { createGame, step, drainEvents, result, multiplier, count, handling, LIVES } from './game.js';
+import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon } from './render3d.js';
 import { botSteer } from './bot.js';
-import { itemIcon } from './draw-items.js';
 import { t, initI18n, setLang, getLang, LANGS, formatNumber } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
@@ -17,37 +15,29 @@ const TEST = params.has('test');
 const DT = 1 / 120;
 
 const BEST_KEY = 'cartcrash:best';
-const DAILY_KEY = 'cartcrash:daily';
+const DIST_KEY = 'cartcrash:bestDistance';
 const SHAKE_KEY = 'cartcrash:shake';
 const RIDES_KEY = 'cartcrash:rides';
 
-
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
-const ctx = canvas.getContext('2d');
-const view = createView();
-view.reduceShake = load(SHAKE_KEY, true) === false;
+const R = createRenderer(canvas, $('fx'));
+R.reduceShake = load(SHAKE_KEY, true) === false;
 
 let mode = 'menu'; // menu | play | paused | end
 let game = null;
 let demo = null; // the ride behind the menu
-let rideDaily = false;
 let lastTime = 0;
 let acc = 0;
 let lastSection = null;
-let shownTips = new Set();
-let lastValue = 0;
+const shownTips = new Set();
+let lastScoreShown = -1;
 const touchMode = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (touchMode) document.documentElement.classList.add('touch');
 
-// ---------- canvas size ----------
+// ---------- size ----------
 function resize() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const W = window.innerWidth, H = window.innerHeight;
-  canvas.width = Math.round(W * dpr);
-  canvas.height = Math.round(H * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  resizeView(view, W, H);
+  resizeRenderer(R, window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', resize);
 
@@ -71,15 +61,14 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+const sideOf = (x) => (x < window.innerWidth / 2 ? -1 : 1);
 canvas.addEventListener('pointerdown', (e) => {
   audio.unlock();
   if (mode !== 'play') return;
-  pointers.set(e.pointerId, e.clientX < window.innerWidth / 2 ? -1 : 1);
+  pointers.set(e.pointerId, sideOf(e.clientX));
   try { canvas.setPointerCapture(e.pointerId); } catch { /* optional */ }
 });
-canvas.addEventListener('pointermove', (e) => {
-  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, e.clientX < window.innerWidth / 2 ? -1 : 1);
-});
+canvas.addEventListener('pointermove', (e) => { if (pointers.has(e.pointerId)) pointers.set(e.pointerId, sideOf(e.clientX)); });
 for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => pointers.delete(e.pointerId));
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('blur', () => { keys.left = keys.right = false; pointers.clear(); if (mode === 'play') pause(); });
@@ -92,28 +81,33 @@ function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
   $('hud').hidden = !(mode === 'play' || mode === 'paused');
   $('touch').hidden = !(touchMode && mode === 'play');
+  $('fx').hidden = mode === 'menu';
   const first = id && $(id)?.querySelector('.btn-primary');
   if (first && !touchMode) first.focus({ preventScroll: true });
 }
 
-function todayKey() { return new Date().toISOString().slice(0, 10); }
-function dailyBest() { const d = load(DAILY_KEY, null); return d && d.day === todayKey() ? d.best : null; }
+function icon(type, size, goods) {
+  const img = document.createElement('img');
+  img.src = itemIcon(type, goods);
+  img.alt = '';
+  img.width = img.height = size;
+  return img;
+}
 
 function renderMenu() {
   const best = load(BEST_KEY, 0) || 0;
-  const daily = dailyBest();
-  const parts = [];
-  if (best) parts.push(t('Best: {n}', { n: `<b>${formatNumber(best)}</b>` }));
-  if (daily !== null) parts.push(t('Today: {n}', { n: `<b>${formatNumber(daily)}</b>` }));
-  $('menu-records').innerHTML = parts.join(' · ') || t('Grab everything. Bring it to the bottom.');
-  const legend = $('legend');
-  legend.replaceChildren(...LEGEND.map((type) => {
+  const dist = load(DIST_KEY, 0) || 0;
+  $('menu-records').innerHTML = best
+    ? `${t('Best: {n}', { n: `<b>${formatNumber(best)}</b>` })} · ${t('Furthest: {n} m', { n: `<b>${formatNumber(dist)}</b>` })}`
+    : t('How far down can you get?');
+  $('legend').replaceChildren(...LEGEND.map((type) => {
     const li = document.createElement('li');
     const b = document.createElement('b'); b.textContent = t(ITEM_NAME[type]);
     const sp = document.createElement('span'); sp.textContent = t(ITEM_EFFECT[type]);
-    li.append(itemIcon(type, 40), b, sp);
+    li.append(icon(type, 40), b, sp);
     return li;
   }));
+  $('rules').textContent = t('The fuller the cart, the more points per metre. Three crashes and it is over.');
   $('controls-help').innerHTML = touchMode
     ? t('Hold the left or right side of the screen to steer.')
     : t('Steer with {keys}', { keys: '<span class="keys"><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd></span>' });
@@ -123,28 +117,26 @@ function goMenu() {
   mode = 'menu';
   portal.gameplay(false);
   audio.stopMusic();
+  audio.rolling(0, false);
   game = null;
+  newDemo();
   renderMenu();
   show('screen-menu');
 }
 
-function start(daily) {
+function start() {
   audio.unlock();
-  rideDaily = daily;
-  const seed = daily ? hashString(`daily:${todayKey()}`) : (TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0);
-  game = createGame(seed, { daily });
-  view.debris = []; view.parts = []; view.texts = []; view.decals = [];
-  view.camX = NaN;
+  const seed = TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0;
+  game = createGame(seed);
+  setGame(R, game);
   lastSection = 'street';
-  lastValue = 0;
+  lastScoreShown = -1;
   acc = 0;
   pointers.clear();
   mode = 'play';
   show(null);
   updateHud(true);
-  $('hint').innerHTML = touchMode ? t('Hold left or right to steer') : t('Steer with {keys}', { keys: '<b>← →</b>' });
-  $('hint').hidden = false;
-  setTimeout(() => { if (game && game.t > 2) $('hint').hidden = true; }, 3500);
+  showHint(touchMode ? t('Hold left or right to steer') : t('Steer with {keys}', { keys: '← →' }), 3500);
   portal.gameplay(true);
   audio.startMusic();
   save(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
@@ -176,46 +168,32 @@ function finish() {
   audio.stopMusic();
   audio.rolling(0, false);
   const r = result(game);
-  let isRecord = false;
-  if (rideDaily) {
-    const prev = dailyBest();
-    if (prev === null || r.score > prev) { save(DAILY_KEY, { day: todayKey(), best: r.score }); isRecord = prev !== null && r.score > 0; }
-  }
   const best = load(BEST_KEY, 0) || 0;
-  if (r.score > best) { save(BEST_KEY, r.score); isRecord = isRecord || (best > 0); }
-  renderEnd(r, isRecord);
+  const isRecord = r.score > best;
+  if (isRecord) save(BEST_KEY, r.score);
+  if (r.distance > (load(DIST_KEY, 0) || 0)) save(DIST_KEY, r.distance);
+  renderEnd(r, isRecord && best > 0);
   show('screen-end');
-  if (isRecord) { audio.record(); portal.happytime(); }
+  if (isRecord && best > 0) { audio.record(); portal.happytime(); }
 }
 
 function endTitle(r) {
-  if (r.score === 0) return t('Empty cart. Bold strategy.');
-  if (r.items >= 25) return t('That is not a cart, that is a tower!');
-  if (r.broken >= 2) return t('Scrambled eggs, anyone?');
-  if (r.lost > r.items * 2) return t('Half the town has your shopping now.');
-  if (r.byType.melon >= 3) return t('Melon delivery service!');
-  if (r.byType.balloon >= 5) return t('Practically flying!');
-  return t('Delivered!');
+  if (r.distance < 150) return t('Short trip!');
+  if (r.bestMult >= 5) return t('That is not a cart, that is a tower!');
+  if (r.broken >= 3) return t('Scrambled eggs, anyone?');
+  if (r.distance > 1500) return t('All the way to the sea!');
+  if (r.lost > 40) return t('Half the town has your shopping now.');
+  return t('What a ride!');
 }
 
 function renderEnd(r, isRecord) {
-  $('end-kicker').textContent = rideDaily ? t('Daily ride · {date}', { date: new Intl.DateTimeFormat(getLang(), { day: 'numeric', month: 'long' }).format(new Date()) }) : t('Quick ride');
   $('end-title').textContent = endTitle(r);
   $('end-record').hidden = !isRecord;
-  const items = $('end-items');
-  items.replaceChildren(...LEGEND.filter((type) => r.byType[type]).map((type) => {
-    const li = document.createElement('li');
-    li.title = t(ITEM_NAME[type]);
-    li.append(itemIcon(type, 34), `×${r.byType[type]}`);
-    return li;
-  }));
-  $('end-lost').textContent = r.lost
-    ? t('Lost on the way: {n} ({v} points)', { n: r.lost, v: formatNumber(r.lostValue) })
-    : t('Nothing lost on the way. Impressive!');
+  $('end-dist').textContent = `${formatNumber(r.distance)} m`;
+  $('end-mult').textContent = `×${r.bestMult.toFixed(1)}`;
+  $('end-pile').textContent = t('{n} things', { n: r.tallest });
   const best = load(BEST_KEY, 0) || 0;
-  const daily = dailyBest();
-  $('end-best').innerHTML = [t('Best: {n}', { n: `<b>${formatNumber(best)}</b>` }), rideDaily && daily !== null ? t('Today: {n}', { n: `<b>${formatNumber(daily)}</b>` }) : ''].filter(Boolean).join(' · ');
-  // Count the score up.
+  $('end-best').innerHTML = t('Best: {n}', { n: `<b>${formatNumber(best)}</b>` });
   const el = $('end-score');
   const target = r.score;
   const t0 = performance.now();
@@ -232,33 +210,55 @@ let toastTimer = null;
 function toast(text) {
   const el = $('toast');
   el.textContent = text;
+  el.classList.remove('show');
+  void el.offsetWidth;
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 1100);
 }
 
+let hintTimer = null;
+function showHint(text, ms = 3200) {
+  const el = $('hint');
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => { el.hidden = true; }, ms);
+}
+
 function chip(type, text, warn) {
   const c = document.createElement('span');
   c.className = `chip${warn ? ' warn' : ''}`;
-  c.append(itemIcon(type, 26), text);
+  c.append(icon(type, 26), text);
   return c;
 }
 
 let chipsKey = '';
+let livesShown = -1;
 function updateHud(force) {
   const g = game;
-  const value = cartValue(g);
-  const el = $('hud-value');
-  if (force || value !== lastValue) {
-    el.textContent = formatNumber(value);
-    el.classList.remove('up', 'down');
-    void el.offsetWidth;
-    if (!force) el.classList.add(value > lastValue ? 'up' : 'down');
-    lastValue = value;
+  const score = Math.floor(g.score);
+  if (force || score !== lastScoreShown) { $('hud-score').textContent = formatNumber(score); lastScoreShown = score; }
+  const m = multiplier(g);
+  const mult = $('hud-mult');
+  const mText = `×${m.toFixed(1)}`;
+  if (mult.textContent !== mText) {
+    mult.classList.remove('up', 'down');
+    void mult.offsetWidth;
+    if (!force) mult.classList.add(parseFloat(mult.textContent.slice(1)) < m ? 'up' : 'down');
+    mult.textContent = mText;
   }
-  const p = progress(g) * 100;
-  $('hud-bar').style.width = `${p}%`;
-  $('hud-marker').style.left = `${p}%`;
+  $('hud-dist').textContent = `${formatNumber(Math.floor(g.distance))} m`;
+  if (force || livesShown !== g.lives) {
+    livesShown = g.lives;
+    const lives = $('hud-lives');
+    lives.replaceChildren(...Array.from({ length: LIVES }, (_, i) => {
+      const s = document.createElement('i');
+      s.className = i < g.lives ? 'life' : 'life lost';
+      return s;
+    }));
+    lives.setAttribute('aria-label', t('Crashes left: {n}', { n: g.lives }));
+  }
   const melons = count(g, 'melon'), balloons = g.balloons.length;
   const oil = g.cart.oil > 0 ? Math.ceil(g.cart.oil) : 0;
   const wobbly = g.wobble > 0.65 && g.stack.length > 2;
@@ -277,34 +277,23 @@ function label(kind, e) {
   if (kind === 'pickup') return t(e.item === 'goods' ? GOODS_NAME[e.goods] : ITEM_NAME[e.item]);
   if (kind === 'fall') return e.why === 'full' ? t('No room!') : t('Fell off!');
   if (kind === 'break') return t('Eggs broke!');
-  if (kind === 'pop') return t('Pop!');
+  if (kind === 'crash') return e.obstacle === 'walker' ? t('Sorry!') : t('Crash!');
   return '';
 }
 
 function handleEvents(g, events, live) {
-  onEvents(view, g, events, label);
+  onEvents(R, g, live ? events : events.filter((e) => e.type !== 'pickup' && e.type !== 'fall' && e.type !== 'break' && e.type !== 'crash'), label);
   if (!live) return;
   for (const e of events) {
     audio.play(e);
     if (e.type === 'pickup' && !shownTips.has(e.item)) {
-      shownTips.add(e.item);
-      if (e.item !== 'goods' || g.stack.length > 3) showHint(t(TIPS[e.item]));
-      else shownTips.delete('goods');
+      if (e.item !== 'goods' || g.stack.length > 3) { shownTips.add(e.item); showHint(t(TIPS[e.item])); }
     }
     if (e.type === 'tall') toast(t('What a pile!'));
-    if (e.type === 'crash') toast(t('Crash!'));
     if (e.type === 'ramp') toast(t('Wheee!'));
-    if (e.type === 'finish') toast(t('Checkout!'));
+    if (e.type === 'dog') toast(t('Woof!'));
+    if (e.type === 'crash' && e.lives === 1) showHint(t('Careful: one more crash and it is over!'), 2500);
   }
-}
-
-let hintTimer = null;
-function showHint(text) {
-  const el = $('hint');
-  el.textContent = text;
-  el.hidden = false;
-  clearTimeout(hintTimer);
-  hintTimer = setTimeout(() => { el.hidden = true; }, 3200);
 }
 
 // ---------- loop ----------
@@ -319,38 +308,39 @@ function simulate(g, dt, steerFn, live) {
 
 function newDemo() {
   demo = createGame((Math.random() * 2 ** 32) >>> 0);
-  view.debris = []; view.parts = []; view.texts = []; view.decals = [];
-  view.camX = NaN;
+  setGame(R, demo);
 }
 
 function frame(dt) {
   if (mode === 'play' && game) {
     const autopilot = params.has('autopilot');
     simulate(game, dt, () => (autopilot ? botSteer(game) : steerInput()), true);
-    const sec = game.track.sectionAt(game.cart.y + 8).kind;
-    if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && !game.finished) toast(t(SECTION_TOAST[sec])); }
-    audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.finished);
+    const sec = game.world.sectionAt(game.cart.y + 12).kind;
+    if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec]) toast(t(SECTION_TOAST[sec])); }
+    audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.over);
     updateHud(false);
-    if (game.t > 3 && !$('hint').hidden && !hintTimer) $('hint').hidden = true;
-    if (game.finished && game.finishT > 1.4) finish();
-    render(ctx, view, game, dt, t);
-  } else if ((mode === 'paused' || mode === 'end') && game) {
-    if (mode === 'end') { acc += 0; step(game, Math.min(dt, 0.05), 0); drainEvents(game); }
-    render(ctx, view, game, mode === 'end' ? dt : 0, t);
-  } else {
-    if (!demo || (demo.finished && demo.finishT > 2)) newDemo();
-    simulate(demo, dt * 0.85, () => botSteer(demo), false);
-    render(ctx, view, demo, dt, t);
+    if (game.over && game.overT > 1.6) finish();
+    render(R, game, dt);
+  } else if (mode === 'end' && game) {
+    step(game, Math.min(dt, 0.05), 0);
+    drainEvents(game);
+    render(R, game, dt);
+  } else if (mode === 'paused' && game) {
+    render(R, game, 0.0001);
+  } else if (mode === 'menu') {
+    if (!demo || (demo.over && demo.overT > 2.5)) newDemo();
+    simulate(demo, dt * 0.85, () => botSteer(demo, 0.9), false);
+    render(R, demo, dt);
   }
 }
 
+const manual = TEST && params.has('manual');
 function loop(now) {
   const dt = lastTime ? Math.min(0.1, (now - lastTime) / 1000) : 0;
   lastTime = now;
   if (!manual) frame(dt);
   requestAnimationFrame(loop);
 }
-const manual = TEST && params.has('manual');
 
 // ---------- settings ----------
 let settingsBack = 'screen-menu';
@@ -367,7 +357,7 @@ function openSettings(back) {
 function syncToggles() {
   $('set-sound').setAttribute('aria-pressed', String(audio.soundEnabled()));
   $('set-music').setAttribute('aria-pressed', String(audio.musicEnabled()));
-  $('set-shake').setAttribute('aria-pressed', String(!view.reduceShake));
+  $('set-shake').setAttribute('aria-pressed', String(!R.reduceShake));
   updateSoundButton();
 }
 function closeSettings() {
@@ -395,20 +385,19 @@ function translatePage() {
 
 function wire() {
   const on = (id, fn) => $(id).addEventListener('click', () => { audio.unlock(); audio.click(); fn(); });
-  on('btn-play', () => start(false));
-  on('btn-daily', () => start(true));
-  on('btn-again', () => start(rideDaily));
+  on('btn-play', start);
+  on('btn-again', start);
   on('btn-menu', goMenu);
   on('btn-pause', pause);
   on('btn-resume', resume);
-  on('btn-restart', () => start(rideDaily));
+  on('btn-restart', start);
   on('btn-quit', goMenu);
   on('btn-settings', () => openSettings('screen-menu'));
   on('btn-pause-settings', () => openSettings('screen-pause'));
   on('btn-settings-done', closeSettings);
   on('set-sound', () => { audio.setSound(!audio.soundEnabled()); syncToggles(); });
   on('set-music', () => { audio.setMusic(!audio.musicEnabled()); syncToggles(); });
-  on('set-shake', () => { view.reduceShake = !view.reduceShake; save(SHAKE_KEY, !view.reduceShake); syncToggles(); });
+  on('set-shake', () => { R.reduceShake = !R.reduceShake; save(SHAKE_KEY, !R.reduceShake); syncToggles(); });
   for (const btn of document.querySelectorAll('[data-sound-toggle]')) {
     btn.addEventListener('click', () => {
       audio.unlock();
@@ -435,6 +424,8 @@ await document.fonts?.load?.('40px "Lilita One"').catch(() => {});
 translatePage();
 if (portalReady) portal.onMute((muted) => { audio.setPortalMuted(muted); });
 goMenu();
+render(R, demo, 0);
+$('loading').hidden = true;
 if (portalReady) portal.loading(false);
 requestAnimationFrame(loop);
 
@@ -443,19 +434,36 @@ if (TEST) {
   window.__cc = {
     get mode() { return mode; },
     get game() { return game; },
-    get demo() { return demo; },
     start,
+    pause,
     frame: (dt = 1 / 30) => frame(dt),
+    /** Simulates `seconds` of riding at once (the bot drives unless steer is given). */
     run(seconds, steer = null) {
       const n = Math.round(seconds / DT);
       for (let i = 0; i < n && mode === 'play'; i++) {
         step(game, DT, steer === null ? botSteer(game) : steer);
         handleEvents(game, drainEvents(game), false);
-        if (game.finished && game.finishT > 1.4) { finish(); break; }
+        if (game.over && game.overT > 1.6) { finish(); break; }
       }
-      updateHud(false);
+      if (mode === 'play') updateHud(false);
     },
+    /** Ends the ride now (three crashes' worth). */
+    crashOut() { game.lives = 1; game.cart.safe = 0; const e = { kind: 'obstacle', type: 'bin', x: game.cart.x, y: game.cart.y + 0.3, id: -1 }; game.world.entities.splice(game.next, 0, e); },
     handling: () => handling(game),
-    ITEMS,
+    portalMuted: () => audio.isPortalMuted(),
+    /** A still for covers and icons: a ride `seconds` in, without the HUD, with the logo if `title`. */
+    poster(seconds, title, closeup = false) {
+      start();
+      this.run(seconds);
+      R.closeup = closeup;
+      document.documentElement.classList.add('poster');
+      if (title) {
+        const el = document.createElement('div');
+        el.className = 'poster-title';
+        el.innerHTML = `<h1 class="logo"><span>Cart</span><span>Crash</span></h1>`;
+        document.body.append(el);
+      }
+      for (let i = 0; i < 40; i++) frame(1 / 30);
+    },
   };
 }

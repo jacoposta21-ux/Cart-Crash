@@ -1,9 +1,10 @@
 // The ride itself, without any drawing: the cart, its load and how the load
-// changes the steering. step() is deterministic for a seed and a sequence of
-// steering inputs, so tests can drive whole rides.
-import { createTrack, rng, OBSTACLES, SECTION, STEP_LENGTH } from './track.js';
+// changes the steering. Endless: it goes on until the third big crash.
+// step() is deterministic for a seed and a sequence of steering inputs, so
+// tests can drive whole rides.
+import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH } from './world.js';
 
-// value: points if it reaches the bottom. weight: how heavy (balloons lift).
+// value: what it adds to the load. weight: how heavy (balloons lift).
 // h: height in the pile (balloons fly on strings instead).
 export const ITEMS = {
   goods: { value: 10, weight: 0.3 },
@@ -20,22 +21,29 @@ export const itemHeight = (it) => (it.type === 'goods' ? GOODS_H[it.goods] : ITE
 export const RIM = 0.62; // the basket holds anything below this height
 export const MAX_PILE = 9; // higher than this, the top just slides off
 export const CART_R = 0.45;
+export const LIVES = 3;
 const GRAVITY = 21;
 const OIL_TIME = 3.2;
 const PUDDLE_TIME = 2.2;
+const SAFE_TIME = 1.6; // after a crash, a moment to recover
+const DOG_TIME = 9;
 
-export function createGame(seed, opts = {}) {
-  const track = createTrack(seed);
+export function createGame(seed) {
   return {
     seed,
-    daily: Boolean(opts.daily),
-    track,
+    world: createWorld(seed),
     t: 0,
-    finished: false,
-    finishT: 0,
+    over: false,
+    overT: 0,
+    distance: 0,
+    score: 0,
+    bestMult: 1,
+    tallest: 0,
+    lives: LIVES,
+    crashes: 0,
     next: 0, // first entity not yet behind the cart
     rand: rng(seed ^ 0x9e3779b9),
-    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, hitCd: 0, step: 0, air: 0 },
+    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0 },
     stack: [], // bottom first: { type, goods?, h }
     balloons: [], // { color }
     tilt: 0,
@@ -44,6 +52,7 @@ export function createGame(seed, opts = {}) {
     tallMark: 0,
     picked: 0,
     lost: [], // items that fell off, broke or popped
+    dog: null, // { x, y, t, look } while a dog runs after the cart
     events: [],
   };
 }
@@ -51,21 +60,26 @@ export function createGame(seed, opts = {}) {
 export const stackHeight = (g) => g.stack.reduce((a, it) => a + it.h, 0);
 export const count = (g, type) => (type === 'balloon' ? g.balloons.length : g.stack.filter((it) => it.type === type).length);
 export const cartValue = (g) => g.stack.reduce((a, it) => a + ITEMS[it.type].value, 0) + g.balloons.length * ITEMS.balloon.value;
+/** Points per metre: 1 with an empty cart, 2 with 100 worth of shopping, and so on. */
+export const multiplier = (g) => 1 + cartValue(g) / 100;
 export const mass = (g) => Math.max(0.55, 1 + g.stack.reduce((a, it) => a + ITEMS[it.type].weight, 0) + g.balloons.length * ITEMS.balloon.weight);
-export const progress = (g) => Math.min(1, g.cart.y / g.track.length);
 
 /** How the load changes the handling right now (also shown in the HUD). */
 export function handling(g) {
   const melons = count(g, 'melon');
   const balloons = g.balloons.length;
-  const heavy = 1 + 0.5 * melons;
   return {
     maxLat: 7.4 / (1 + 0.16 * melons),
-    grip: g.cart.oil > 0 ? 1.1 : 10 / heavy,
+    grip: g.cart.oil > 0 ? 1.1 : 10 / (1 + 0.5 * melons),
     hopEvery: balloons ? Math.max(1.1, 2.9 - 0.3 * balloons) : 0,
     hopPower: balloons ? (4.2 + 1.15 * Math.min(balloons, 6)) / Math.sqrt(mass(g)) : 0,
     gravity: GRAVITY * Math.max(0.4, 1 - 0.09 * balloons),
   };
+}
+
+/** Rolling speed: faster on steep bits, with a heavy cart, and the further you get. */
+export function targetSpeed(g, kind) {
+  return 6.5 + 4.2 * SECTION[kind].pace + Math.min(9, g.distance / 220) + 0.35 * Math.min(mass(g) - 1, 6);
 }
 
 function emit(g, type, data = {}) {
@@ -102,18 +116,17 @@ export function jolt(g, j, cause) {
 function pickUp(g, e) {
   e.taken = true;
   g.picked++;
-  const c = g.cart;
   if (e.type === 'balloon') {
     g.balloons.push({ color: e.variant % 5 });
   } else {
-    const it = { type: e.type, h: 0 };
+    const it = { type: e.type, h: 0, id: e.id };
     if (e.type === 'goods') it.goods = GOODS[e.variant % GOODS.length];
     it.h = itemHeight(it);
     g.stack.push(it);
     // Something landing in the basket rocks it a little.
     g.tiltV += (g.rand() - 0.5) * (0.6 + it.h);
   }
-  if (e.type === 'oil') c.oil = Math.max(c.oil, OIL_TIME);
+  if (e.type === 'oil') g.cart.oil = Math.max(g.cart.oil, OIL_TIME);
   emit(g, 'pickup', { item: e.type, goods: e.type === 'goods' ? GOODS[e.variant % GOODS.length] : null, value: ITEMS[e.type].value, x: e.x, y: e.y });
 }
 
@@ -121,42 +134,61 @@ function crash(g, e) {
   const c = g.cart;
   const o = OBSTACLES[e.type];
   e.knocked = true;
+  e.knockT = g.t;
   e.knockDir = Math.sign(e.x - c.x) || 1;
-  c.hitCd = 0.5;
-  c.v *= 0.55;
+  c.safe = SAFE_TIME;
+  c.v *= 0.5;
   c.vx = -e.knockDir * 4.5;
-  emit(g, 'crash', { obstacle: e.type, x: e.x, y: e.y });
+  g.lives--;
+  g.crashes++;
+  emit(g, 'crash', { obstacle: e.type, x: e.x, y: e.y, lives: g.lives });
+  if (g.lives <= 0) { gameOver(g); return; }
   if (g.balloons.length && g.rand() < 0.5) {
     const b = g.balloons.pop();
     g.lost.push({ type: 'balloon', why: 'popped', ...b });
     emit(g, 'pop', {});
   }
   loseTop(g, 'crash', -e.knockDir);
-  jolt(g, 0.75 + o.height * 0.3, 'crash');
+  jolt(g, 0.75 + o.height * 0.2, 'crash');
+}
+
+function gameOver(g) {
+  g.over = true;
+  g.overT = 0;
+  g.cart.flip = 0.001;
+  emit(g, 'gameover', { score: Math.floor(g.score) });
 }
 
 /** Advance the ride by dt seconds; steer is -1 (left) .. 1 (right). */
 export function step(g, dt, steer = 0) {
   const c = g.cart;
-  const tr = g.track;
+  const w = g.world;
   g.t += dt;
-  if (g.finished) {
-    g.finishT += dt;
-    c.v = Math.max(0, c.v - 14 * dt);
+  if (g.over) {
+    // The cart tips over and slides to a stop; the load goes everywhere.
+    g.overT += dt;
+    c.v = Math.max(0, c.v - 12 * dt);
     c.y += c.v * dt;
-    c.vx *= Math.max(0, 1 - 4 * dt);
+    c.vx *= Math.max(0, 1 - 3 * dt);
     c.x += c.vx * dt;
-    steer = 0;
+    c.flip = Math.min(1, c.flip + dt * 2.5);
+    if (g.stack.length && g.rand() < dt * 14) loseTop(g, 'gameover');
+    if (g.balloons.length && g.rand() < dt * 6) { const b = g.balloons.pop(); g.lost.push({ type: 'balloon', why: 'flew', ...b }); emit(g, 'release', { color: b.color }); }
+    return;
   }
+  w.ensure(c.y + 160);
   const hd = handling(g);
-  const sec = tr.sectionAt(c.y);
+  const sec = w.sectionAt(c.y);
 
-  if (!g.finished) {
-    // Downhill: steeper sections and a heavier cart roll faster, and it speeds up as the ride goes on.
-    const target = 6.5 + 4.2 * SECTION[sec.kind].slope + 3.6 * progress(g) + 0.35 * Math.min(mass(g) - 1, 6);
-    c.v += (target - c.v) * Math.min(1, (c.v < 4 ? 2.4 : 1.1) * dt);
-    c.y += c.v * dt;
-  }
+  // Downhill.
+  const target = targetSpeed(g, sec.kind);
+  c.v += (target - c.v) * Math.min(1, (c.v < 4 ? 2.4 : 1.1) * dt);
+  const dy = c.v * dt;
+  c.y += dy;
+  g.distance = c.y;
+  const mult = multiplier(g);
+  g.score += dy * mult;
+  if (mult > g.bestMult) g.bestMult = mult;
 
   // Steering: watermelons slow it down, oil makes the cart slide, in the air there is little grip.
   const airborne = c.z > 0.02;
@@ -176,14 +208,13 @@ export function step(g, dt, steer = 0) {
   if (c.z > 0 || c.vz > 0) {
     c.vz -= hd.gravity * dt;
     c.z += c.vz * dt;
-    c.air += dt;
     if (c.z <= 0) {
       const impact = -c.vz;
-      c.z = 0; c.vz = 0; c.air = 0;
+      c.z = 0; c.vz = 0;
       emit(g, 'land', { impact });
       if (impact > 3) jolt(g, Math.min(1.1, (impact - 3) * 0.1 + 0.15), 'land');
     }
-  } else if (hd.hopEvery && !g.finished) {
+  } else if (hd.hopEvery) {
     c.hopIn -= dt;
     if (c.hopIn <= 0) {
       c.vz = hd.hopPower;
@@ -194,9 +225,9 @@ export function step(g, dt, steer = 0) {
 
   // The road's edges: curbs, walls and market stalls bounce the cart back.
   c.curbCd -= dt;
-  c.hitCd -= dt;
-  const cx = tr.center(c.y);
-  const lim = tr.halfWidth(c.y) - CART_R;
+  c.safe -= dt;
+  const cx = w.center(c.y);
+  const lim = w.halfWidth(c.y) - CART_R;
   if (Math.abs(c.x - cx) > lim) {
     const side = Math.sign(c.x - cx);
     c.x = cx + side * lim;
@@ -210,26 +241,65 @@ export function step(g, dt, steer = 0) {
   }
 
   // Stairs: every step is a small bump (unless you fly over it).
-  if (sec.kind === 'stairs' && !airborne) {
-    const s = Math.floor(c.y / STEP_LENGTH);
-    if (s !== c.step) { c.step = s; jolt(g, 0.22, 'stairs'); }
-  } else c.step = Math.floor(c.y / STEP_LENGTH);
+  const s = Math.floor(c.y / STEP_LENGTH);
+  if (sec.kind === 'stairs' && !airborne && s !== c.step) jolt(g, 0.22, 'stairs');
+  c.step = s;
+
+  // People crossing, pigeons, a dog.
+  const ents = w.entities;
+  if (g.next > 200) g.next -= w.prune(c.y - 25);
+  while (g.next < ents.length && ents[g.next].y < c.y - 3) g.next++;
+  for (let i = g.next; i < ents.length && ents[i].y < c.y + 30; i++) {
+    const e = ents[i];
+    if (e.type === 'walker' && !e.knocked) {
+      if (!e.going && e.y - c.y < e.wake) e.going = true;
+      if (e.going) {
+        const endX = w.center(e.y) - e.side * (w.halfWidth(e.y) + 1.5);
+        e.x += -e.side * e.speed * dt;
+        e.walk = (e.walk || 0) + dt * e.speed;
+        if ((e.x - endX) * -e.side > 0) e.gone = true;
+      }
+    } else if (e.kind === 'pigeons' && !e.flying && e.y - c.y < 7) {
+      e.flying = g.t;
+      emit(g, 'pigeons', { x: e.x, y: e.y });
+    } else if (e.kind === 'dog' && !e.chased && e.y - c.y < 6) {
+      e.chased = true;
+      g.dog = { x: e.x, y: e.y, t: DOG_TIME, look: e.look, run: 0 };
+      emit(g, 'dog', {});
+    }
+  }
+  if (g.dog) {
+    // It runs after the cart, a couple of metres behind, then gives up.
+    const d = g.dog;
+    d.t -= dt;
+    const want = d.t > 0 ? c.y - 2.4 - Math.sin(g.t * 2) * 0.6 : d.y;
+    d.y += Math.max(-1, Math.min(1, want - d.y)) * Math.max(c.v * 1.1, 6) * dt;
+    if (d.t <= 0) d.y += dt * 1.5;
+    d.x += (c.x + Math.sin(g.t * 3) * 0.8 - d.x) * Math.min(1, dt * 2.5);
+    d.run += dt;
+    if (d.t > 0 && Math.floor(d.run / 1.6) !== Math.floor((d.run - dt) / 1.6)) emit(g, 'bark', {});
+    if (d.y < c.y - 30) g.dog = null;
+  }
 
   // What the cart touches.
-  const ents = tr.entities;
-  while (g.next < ents.length && ents[g.next].y < c.y - 2) g.next++;
   for (let i = g.next; i < ents.length && ents[i].y < c.y + 1.5; i++) {
     const e = ents[i];
-    if (e.taken || e.knocked) continue;
-    const dx = e.x - c.x, dy = e.y - c.y;
+    if (e.taken || e.knocked || e.gone) continue;
+    if (e.kind !== 'item' && e.kind !== 'obstacle') continue;
+    const dx = e.x - c.x, dyy = e.y - c.y;
     if (e.kind === 'item') {
-      if (dx * dx + dy * dy < 0.78 * 0.78 && c.z < 1.4) pickUp(g, e);
+      if (dx * dx + dyy * dyy < 0.78 * 0.78 && c.z < 1.4) pickUp(g, e);
       continue;
     }
     const o = OBSTACLES[e.type];
     const rr = o.r + CART_R * 0.85;
-    if (dx * dx + dy * dy > rr * rr || c.z > o.height) continue;
-    if (o.solid) { if (c.hitCd <= 0) crash(g, e); continue; }
+    if (dx * dx + dyy * dyy > rr * rr || c.z > o.height) continue;
+    if (o.solid) {
+      if (c.safe <= 0) crash(g, e);
+      else { e.knocked = true; e.knockT = g.t; e.knockDir = Math.sign(e.x - c.x) || 1; }
+      if (g.over) return;
+      continue;
+    }
     if (e.used) continue;
     e.used = true;
     if (e.type === 'pothole') jolt(g, 0.75, 'pothole');
@@ -258,15 +328,11 @@ export function step(g, dt, steer = 0) {
       g.tiltV *= 0.25;
     }
   }
-  // A new personal tallest pile in this ride (at 3, 5 and 7 units).
-  const mark = [3, 5, 7].filter((m) => H >= m).length;
-  if (mark > g.tallMark) { g.tallMark = mark; emit(g, 'tall', { height: H }); }
-
-  if (!g.finished && c.y >= tr.length) {
-    g.finished = true;
-    g.finishT = 0;
-    emit(g, 'finish', { score: cartValue(g) });
-  }
+  const H2 = stackHeight(g);
+  if (g.stack.length > g.tallest) g.tallest = g.stack.length;
+  // A new personal tallest pile in this ride (at 3, 5 and 7 metres).
+  const mark = [3, 5, 7].filter((m) => H2 >= m).length;
+  if (mark > g.tallMark) { g.tallMark = mark; emit(g, 'tall', { height: H2 }); }
 }
 
 /** Pops this step's events (for sound and effects). */
@@ -278,19 +344,14 @@ export function drainEvents(g) {
 
 /** The ride's outcome, for the end screen and the records. */
 export function result(g) {
-  const byType = {};
-  for (const it of g.stack) byType[it.type] = (byType[it.type] || 0) + 1;
-  if (g.balloons.length) byType.balloon = g.balloons.length;
-  const lostValue = g.lost.reduce((a, it) => a + ITEMS[it.type].value, 0);
   return {
-    score: cartValue(g),
-    items: g.stack.length + g.balloons.length,
-    byType,
-    lost: g.lost.length,
-    lostValue,
+    score: Math.floor(g.score),
+    distance: Math.floor(g.distance),
+    bestMult: g.bestMult,
+    picked: g.picked,
+    tallest: g.tallest,
+    lost: g.lost.filter((it) => it.why !== 'gameover' && it.why !== 'flew').length,
     broken: g.lost.filter((it) => it.why === 'broke').length,
-    popped: g.lost.filter((it) => it.why === 'popped').length,
-    tallest: g.stack.length,
     time: g.t,
   };
 }

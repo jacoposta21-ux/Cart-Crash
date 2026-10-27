@@ -1,7 +1,7 @@
 {
   "name": "cart-crash",
-  "version": "0.1.0",
-  "description": "Cart Crash: ride a shopping cart down a hilly town. Everything you grab changes how you steer.",
+  "version": "1.0.0",
+  "description": "Cart Crash: ride a shopping cart down an endless hilly town in 3D. Everything you grab piles up in the cart and changes how you steer.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "dev": "node scripts/build.mjs && node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:e2e": "node scripts/build.mjs && node scripts/build.mjs --target=crazygames --out=dist-crazygames && node e2e/run.mjs",
-    "media": "node scripts/build.mjs && node scripts/media.mjs"
+    "media": "node scripts/build.mjs && node scripts/media.mjs",
+    "shots": "node scripts/build.mjs && node scripts/shots.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@fontsource-variable/nunito": "^5.3.0",
     "@fontsource/lilita-one": "^5.3.0",
-    "playwright-core": "^1.63.0"
+    "playwright-core": "^1.63.0",
+    "three": "^0.170.0"
   }
 }

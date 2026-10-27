@@ -1,0 +1,367 @@
+// Low-poly models built in code (no model files): the things you grab, the
+// cart, obstacles, people, pigeons and a dog. Every model stands on y = 0.
+import * as THREE from '../vendor/three/three.module.min.js';
+
+const mats = new Map();
+/** One shared flat-shaded material per colour. */
+export function mat(color, opts = {}) {
+  const key = `${color}|${opts.opacity ?? 1}|${opts.basic ? 1 : 0}`;
+  if (!mats.has(key)) {
+    const o = { color, flatShading: !opts.basic };
+    if (opts.opacity !== undefined) { o.transparent = true; o.opacity = opts.opacity; o.depthWrite = false; }
+    mats.set(key, opts.basic ? new THREE.MeshBasicMaterial(o) : new THREE.MeshLambertMaterial(o));
+  }
+  return mats.get(key);
+}
+
+const geos = new Map();
+function geo(key, make) {
+  if (!geos.has(key)) geos.set(key, make());
+  return geos.get(key);
+}
+const box = (w, h, d) => geo(`b${w}|${h}|${d}`, () => new THREE.BoxGeometry(w, h, d));
+const cyl = (rt, rb, h, n = 10) => geo(`c${rt}|${rb}|${h}|${n}`, () => new THREE.CylinderGeometry(rt, rb, h, n));
+const sph = (r, ws = 10, hs = 8) => geo(`s${r}|${ws}|${hs}`, () => new THREE.SphereGeometry(r, ws, hs));
+const cone = (r, h, n = 8) => geo(`k${r}|${h}|${n}`, () => new THREE.ConeGeometry(r, h, n));
+
+function mesh(g, m, x = 0, y = 0, z = 0) {
+  const o = new THREE.Mesh(g, m);
+  o.position.set(x, y, z);
+  return o;
+}
+
+export const BALLOON_COLORS = ['#ff4f6d', '#ffcf3a', '#3fb6ff', '#8f6bff', '#3ddc84'];
+
+// A melon with stripes: vertex colours by angle around its long axis.
+const melonGeo = (() => {
+  const g = new THREE.SphereGeometry(0.36, 14, 10);
+  g.scale(1.15, 1, 0.95);
+  const pos = g.attributes.position;
+  const colors = [];
+  const dark = new THREE.Color('#1f6e32'), light = new THREE.Color('#3fae55');
+  for (let i = 0; i < pos.count; i++) {
+    const a = Math.atan2(pos.getZ(i), pos.getY(i));
+    const c = Math.sin(a * 7) > 0.2 ? dark : light;
+    colors.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  return g;
+})();
+const melonMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+
+const GOODS_MAKERS = {
+  cereal() {
+    const g = new THREE.Group();
+    g.add(mesh(box(0.42, 0.62, 0.16), mat('#ff7a2f'), 0, 0.31, 0));
+    g.add(mesh(box(0.3, 0.2, 0.17), mat('#fff3c4'), 0, 0.32, 0));
+    g.add(mesh(box(0.43, 0.1, 0.17), mat('#c0392b'), 0, 0.54, 0));
+    return g;
+  },
+  roll() {
+    const g = new THREE.Group();
+    const m = mesh(cyl(0.2, 0.2, 0.46, 12), mat('#f6f7ff'), 0, 0.23, 0);
+    g.add(m);
+    g.add(mesh(cyl(0.07, 0.07, 0.47, 8), mat('#c9b48f'), 0, 0.23, 0));
+    return g;
+  },
+  can() {
+    const g = new THREE.Group();
+    g.add(mesh(cyl(0.15, 0.15, 0.38, 12), mat('#d62f2f'), 0, 0.19, 0));
+    g.add(mesh(cyl(0.155, 0.155, 0.14, 12), mat('#ffe9b0'), 0, 0.2, 0));
+    return g;
+  },
+  bread() {
+    const g = new THREE.Group();
+    const b = mesh(sph(0.2, 10, 6), mat('#e3a453'), 0, 0.17, 0);
+    b.scale.set(2.1, 0.85, 0.9);
+    g.add(b);
+    return g;
+  },
+  cheese() {
+    const g = new THREE.Group();
+    const w = mesh(cyl(0.34, 0.34, 0.32, 3), mat('#ffd23f'), 0, 0.16, 0);
+    w.rotation.y = 0.5;
+    g.add(w);
+    return g;
+  },
+  soda() {
+    const g = new THREE.Group();
+    g.add(mesh(cyl(0.13, 0.13, 0.38, 10), mat('#39b54a'), 0, 0.19, 0));
+    g.add(mesh(cyl(0.05, 0.12, 0.14, 10), mat('#39b54a'), 0, 0.45, 0));
+    g.add(mesh(cyl(0.05, 0.05, 0.05, 8), mat('#e63946'), 0, 0.54, 0));
+    g.add(mesh(cyl(0.135, 0.135, 0.1, 10), mat('#ffffff'), 0, 0.22, 0));
+    return g;
+  },
+  pineapple() {
+    const g = new THREE.Group();
+    const b = mesh(sph(0.2, 8, 6), mat('#f0b429'), 0, 0.24, 0);
+    b.scale.set(1, 1.25, 1);
+    g.add(b);
+    for (let i = 0; i < 4; i++) {
+      const l = mesh(cone(0.06, 0.26, 4), mat('#3c9a3c'), Math.cos(i * 1.57) * 0.05, 0.56, Math.sin(i * 1.57) * 0.05);
+      l.rotation.set(Math.sin(i * 1.57) * 0.4, 0, -Math.cos(i * 1.57) * 0.4);
+      g.add(l);
+    }
+    return g;
+  },
+  detergent() {
+    const g = new THREE.Group();
+    g.add(mesh(box(0.36, 0.46, 0.24), mat('#2f80ed'), 0, 0.23, 0));
+    g.add(mesh(cyl(0.07, 0.07, 0.1, 8), mat('#f2994a'), 0.08, 0.5, 0));
+    g.add(mesh(box(0.2, 0.16, 0.25), mat('#e8f1ff'), 0, 0.24, 0));
+    return g;
+  },
+};
+
+/** A grabbable thing. it: { type, goods?, color? }. */
+export function makeItem(it) {
+  const g = new THREE.Group();
+  switch (it.type) {
+    case 'melon': g.add(mesh(melonGeo, melonMat, 0, 0.36, 0)); break;
+    case 'oil':
+      g.add(mesh(cyl(0.14, 0.15, 0.42, 10), mat('#c8b400'), 0, 0.21, 0));
+      g.add(mesh(cyl(0.155, 0.155, 0.14, 10), mat('#4f7a1f'), 0, 0.2, 0));
+      g.add(mesh(cyl(0.05, 0.13, 0.12, 10), mat('#c8b400'), 0, 0.48, 0));
+      g.add(mesh(cyl(0.055, 0.055, 0.06, 8), mat('#2b2d42'), 0, 0.57, 0));
+      break;
+    case 'eggs': {
+      g.add(mesh(box(0.62, 0.16, 0.3), mat('#c8a27a'), 0, 0.08, 0));
+      for (let i = 0; i < 4; i++) {
+        const e = mesh(sph(0.075, 8, 6), mat('#fbf5ea'), -0.22 + i * 0.147, 0.2, 0);
+        e.scale.set(1, 1.25, 1);
+        g.add(e);
+      }
+      break;
+    }
+    case 'balloon': g.add(makeBalloon(it.color ?? 0)); break;
+    case 'goods': g.add((GOODS_MAKERS[it.goods] || GOODS_MAKERS.cereal)()); break;
+    default: break;
+  }
+  return g;
+}
+
+/** A balloon whose knot sits at y = 0 (the string is drawn separately). */
+export function makeBalloon(color) {
+  const g = new THREE.Group();
+  const b = mesh(sph(0.28, 12, 10), mat(BALLOON_COLORS[color % 5]), 0, 0.34, 0);
+  b.scale.set(0.9, 1.1, 0.9);
+  g.add(b);
+  g.add(mesh(cone(0.05, 0.08, 6), mat(BALLOON_COLORS[color % 5]), 0, 0.03, 0));
+  return g;
+}
+
+/** The shopping cart, facing -z (down the hill). The basket floor is at BASKET_Y. */
+export const BASKET_Y = 0.42;
+export function makeCart() {
+  const g = new THREE.Group();
+  const steel = mat('#c9d1de');
+  const W = 1.0, D = 1.25, H = 0.62, y0 = BASKET_Y;
+  const bar = (w, h, d, x, y, z) => g.add(mesh(box(w, h, d), steel, x, y, z));
+  const t = 0.035;
+  // Basket frame: bottom and top rectangles, corner posts.
+  for (const y of [y0, y0 + H]) {
+    bar(W, t, t, 0, y, -D / 2); bar(W, t, t, 0, y, D / 2);
+    bar(t, t, D, -W / 2, y, 0); bar(t, t, D, W / 2, y, 0);
+  }
+  for (const x of [-W / 2, W / 2]) for (const z of [-D / 2, D / 2]) bar(t, H, t, x, y0 + H / 2, z);
+  // Wire mesh: thin bars on the sides and back, a see-through panel behind them.
+  for (let i = 1; i < 6; i++) {
+    const z = -D / 2 + (i * D) / 6;
+    bar(t * 0.6, H, t * 0.6, -W / 2, y0 + H / 2, z); bar(t * 0.6, H, t * 0.6, W / 2, y0 + H / 2, z);
+  }
+  for (let i = 1; i < 5; i++) { const x = -W / 2 + (i * W) / 5; bar(t * 0.6, H, t * 0.6, x, y0 + H / 2, D / 2); bar(t * 0.6, H, t * 0.6, x, y0 + H / 2, -D / 2); }
+  for (const y of [y0 + H / 3, y0 + (2 * H) / 3]) { bar(W, t * 0.6, t * 0.6, 0, y, D / 2); bar(t * 0.6, t * 0.6, D, -W / 2, y, 0); bar(t * 0.6, t * 0.6, D, W / 2, y, 0); }
+  const glass = mat('#aeb8c8', { opacity: 0.22 });
+  g.add(mesh(box(W, H, 0.01), glass, 0, y0 + H / 2, D / 2));
+  g.add(mesh(box(0.01, H, D), glass, -W / 2, y0 + H / 2, 0));
+  g.add(mesh(box(0.01, H, D), glass, W / 2, y0 + H / 2, 0));
+  g.add(mesh(box(W, 0.02, D), mat('#8d96a8'), 0, y0, 0));
+  // Chassis and wheels.
+  bar(0.05, 0.05, D * 1.05, -0.36, 0.18, 0); bar(0.05, 0.05, D * 1.05, 0.36, 0.18, 0);
+  for (const [x, z] of [[-0.4, -0.5], [0.4, -0.5], [-0.4, 0.55], [0.4, 0.55]]) {
+    bar(0.03, 0.22, 0.03, x, 0.25, z);
+    const wheel = mesh(cyl(0.1, 0.1, 0.06, 10), mat('#26262c'), x, 0.1, z);
+    wheel.rotation.z = Math.PI / 2;
+    g.add(wheel);
+  }
+  // Handle with the red grip, nearest to the camera.
+  bar(t, 0.35, t, -W / 2, y0 + H + 0.1, D / 2 + 0.12);
+  bar(t, 0.35, t, W / 2, y0 + H + 0.1, D / 2 + 0.12);
+  const grip = mesh(cyl(0.05, 0.05, W + 0.08, 10), mat('#e63946'), 0, y0 + H + 0.26, D / 2 + 0.18);
+  grip.rotation.z = Math.PI / 2;
+  g.add(grip);
+  return g;
+}
+export const HANDLE = new THREE.Vector3(0, BASKET_Y + 0.62 + 0.26, 0.8);
+
+export function makeObstacle(type) {
+  const g = new THREE.Group();
+  switch (type) {
+    case 'cone':
+      g.add(mesh(box(0.6, 0.06, 0.6), mat('#ff7b00'), 0, 0.03, 0));
+      g.add(mesh(cone(0.24, 0.6, 10), mat('#ff7b00'), 0, 0.36, 0));
+      g.add(mesh(cyl(0.12, 0.17, 0.14, 10), mat('#ffffff'), 0, 0.36, 0));
+      break;
+    case 'bin':
+      g.add(mesh(box(0.8, 1.05, 0.75), mat('#2e7d32'), 0, 0.55, 0));
+      g.add(mesh(box(0.88, 0.1, 0.82), mat('#1b5e20'), 0, 1.12, 0));
+      for (const x of [-0.3, 0.3]) { const w = mesh(cyl(0.1, 0.1, 0.08, 8), mat('#111111'), x, 0.1, 0.38); w.rotation.z = Math.PI / 2; g.add(w); }
+      break;
+    case 'crate':
+      g.add(mesh(box(0.95, 0.75, 0.75), mat('#c08a4a'), 0, 0.38, 0));
+      g.add(mesh(box(0.97, 0.08, 0.77), mat('#8a5c2c'), 0, 0.2, 0));
+      g.add(mesh(box(0.97, 0.08, 0.77), mat('#8a5c2c'), 0, 0.56, 0));
+      for (let i = 0; i < 6; i++) g.add(mesh(sph(0.13, 6, 5), mat(['#ff9f1c', '#e63946', '#7bc043'][i % 3]), -0.3 + (i % 3) * 0.3, 0.82, i < 3 ? -0.15 : 0.15));
+      break;
+    case 'bollard':
+      g.add(mesh(cyl(0.15, 0.17, 0.85, 10), mat('#3a3f4b'), 0, 0.42, 0));
+      g.add(mesh(cyl(0.155, 0.155, 0.1, 10), mat('#ffcc00'), 0, 0.62, 0));
+      g.add(mesh(sph(0.16, 10, 6), mat('#4b5160'), 0, 0.85, 0));
+      break;
+    case 'scooter': {
+      g.add(mesh(box(0.45, 0.4, 1.2), mat('#5ec8e5'), 0, 0.45, 0));
+      g.add(mesh(box(0.4, 0.12, 0.6), mat('#2b2d42'), 0, 0.7, 0.15));
+      g.add(mesh(box(0.08, 0.6, 0.08), mat('#555555'), 0, 0.85, -0.55));
+      g.add(mesh(box(0.6, 0.06, 0.06), mat('#333333'), 0, 1.15, -0.55));
+      for (const z of [-0.5, 0.5]) { const w = mesh(cyl(0.2, 0.2, 0.1, 10), mat('#222222'), 0, 0.2, z); w.rotation.z = Math.PI / 2; g.add(w); }
+      g.rotation.y = 0.5;
+      break;
+    }
+    case 'pothole': {
+      const p = mesh(cyl(0.5, 0.5, 0.02, 9), mat('#2a2b30'), 0, 0.012, 0);
+      p.scale.set(1, 1, 0.7);
+      g.add(p);
+      const r = mesh(cyl(0.56, 0.56, 0.018, 9), mat('#44454d'), 0, 0.008, 0);
+      r.scale.set(1, 1, 0.75);
+      g.add(r);
+      break;
+    }
+    case 'puddle': {
+      const p = mesh(cyl(0.78, 0.78, 0.02, 14), mat('#2d2a3a'), 0, 0.012, 0);
+      p.scale.set(1, 1, 0.6);
+      g.add(p);
+      const s = mesh(cyl(0.45, 0.45, 0.02, 14), mat('#7fd6ff', { opacity: 0.55 }), -0.1, 0.03, 0);
+      s.scale.set(1, 1, 0.4);
+      g.add(s);
+      const s2 = mesh(cyl(0.3, 0.3, 0.02, 14), mat('#ff7ad9', { opacity: 0.5 }), 0.2, 0.035, 0.05);
+      s2.scale.set(1, 1, 0.5);
+      g.add(s2);
+      break;
+    }
+    case 'ramp': {
+      const shape = new THREE.Shape([new THREE.Vector2(-0.8, 0), new THREE.Vector2(0.8, 0), new THREE.Vector2(0.8, 0.5)]);
+      const wedge = new THREE.Mesh(geo('ramp', () => new THREE.ExtrudeGeometry(shape, { depth: 1.3, bevelEnabled: false })), mat('#c99a5b'));
+      wedge.rotation.y = Math.PI / 2;
+      wedge.position.set(-0.65, 0, 0);
+      g.add(wedge);
+      const stripe = mesh(box(0.3, 0.02, 0.9), mat('#ffd23f'), 0, 0.27, 0);
+      stripe.rotation.x = -0.36;
+      g.add(stripe);
+      break;
+    }
+    default: break;
+  }
+  return g;
+}
+
+const SKIN = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+const SHIRT = ['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#8f6bff', '#ffd23f', '#6a994e', '#ef476f'];
+const PANTS = ['#264653', '#3d405b', '#6b705c', '#1d3557', '#9c6644'];
+const HAIR = ['#2b2118', '#6b4423', '#d9b36c', '#9a9a9a', '#e8e8e8', '#b23a48'];
+
+/** Someone crossing the street (legs swing while walking). look: a number picking colours and extras. */
+export function makeWalker(look) {
+  const g = new THREE.Group();
+  const shirt = mat(SHIRT[look % SHIRT.length]), pants = mat(PANTS[(look >> 2) % PANTS.length]);
+  const skin = mat(SKIN[(look >> 1) % SKIN.length]), hair = mat(HAIR[(look >> 3) % HAIR.length]);
+  const legL = new THREE.Group(), legR = new THREE.Group();
+  for (const [leg, x] of [[legL, -0.11], [legR, 0.11]]) {
+    leg.position.set(x, 0.8, 0);
+    leg.add(mesh(box(0.15, 0.8, 0.17), pants, 0, -0.4, 0));
+    leg.add(mesh(box(0.16, 0.08, 0.26), mat('#2b2d42'), 0, -0.78, -0.04));
+    g.add(leg);
+  }
+  g.add(mesh(box(0.44, 0.6, 0.26), shirt, 0, 1.1, 0));
+  const armL = new THREE.Group(), armR = new THREE.Group();
+  for (const [arm, x] of [[armL, -0.28], [armR, 0.28]]) {
+    arm.position.set(x, 1.36, 0);
+    arm.add(mesh(box(0.11, 0.55, 0.13), shirt, 0, -0.26, 0));
+    arm.add(mesh(box(0.1, 0.1, 0.1), skin, 0, -0.56, 0));
+    g.add(arm);
+  }
+  g.add(mesh(box(0.28, 0.3, 0.28), skin, 0, 1.58, 0));
+  g.add(mesh(box(0.3, 0.12, 0.3), hair, 0, 1.76, 0.01));
+  if (look % 3 === 0) g.add(mesh(box(0.2, 0.28, 0.24), mat('#e9c46a'), 0.3, 0.95, 0)); // a shopping bag
+  if (look % 4 === 1) { g.add(mesh(cyl(0.22, 0.22, 0.04, 10), mat('#3d405b'), 0, 1.82, 0)); g.add(mesh(cyl(0.14, 0.15, 0.14, 10), mat('#3d405b'), 0, 1.88, 0)); }
+  g.userData = { legL, legR, armL, armR };
+  return g;
+}
+
+export function animateWalker(g, phase, moving) {
+  const { legL, legR, armL, armR } = g.userData;
+  const a = moving ? Math.sin(phase) * 0.6 : 0;
+  legL.rotation.x = a; legR.rotation.x = -a;
+  armL.rotation.x = -a * 0.8; armR.rotation.x = a * 0.8;
+}
+
+export function makePigeon() {
+  const g = new THREE.Group();
+  const b = mesh(sph(0.12, 8, 6), mat('#8d99ae'), 0, 0.14, 0);
+  b.scale.set(0.9, 0.85, 1.4);
+  g.add(b);
+  g.add(mesh(sph(0.07, 8, 6), mat('#6d7a92'), 0, 0.25, -0.13));
+  const beak = mesh(cone(0.025, 0.06, 5), mat('#f4a261'), 0, 0.24, -0.21);
+  beak.rotation.x = -Math.PI / 2;
+  g.add(beak);
+  const wl = mesh(box(0.25, 0.02, 0.14), mat('#6d7a92'), -0.13, 0.18, 0.02);
+  const wr = mesh(box(0.25, 0.02, 0.14), mat('#6d7a92'), 0.13, 0.18, 0.02);
+  g.add(wl, wr);
+  g.userData = { wl, wr };
+  return g;
+}
+
+export function makeDog(look) {
+  const g = new THREE.Group();
+  const fur = mat(['#a0522d', '#d2b48c', '#3b2f2f', '#f5f5f5'][look % 4]);
+  const dark = mat('#2b2118');
+  g.add(mesh(box(0.34, 0.3, 0.7), fur, 0, 0.45, 0));
+  const head = new THREE.Group();
+  head.position.set(0, 0.68, -0.4);
+  head.add(mesh(box(0.28, 0.26, 0.3), fur, 0, 0, 0));
+  head.add(mesh(box(0.16, 0.12, 0.16), fur, 0, -0.05, -0.2));
+  head.add(mesh(box(0.06, 0.06, 0.04), dark, 0, -0.01, -0.29));
+  head.add(mesh(box(0.08, 0.16, 0.06), dark, -0.12, 0.14, 0.02));
+  head.add(mesh(box(0.08, 0.16, 0.06), dark, 0.12, 0.14, 0.02));
+  g.add(head);
+  const tail = mesh(box(0.06, 0.06, 0.3), fur, 0, 0.6, 0.45);
+  tail.rotation.x = -0.6;
+  g.add(tail);
+  const legs = [];
+  for (const [x, z] of [[-0.12, -0.25], [0.12, -0.25], [-0.12, 0.25], [0.12, 0.25]]) {
+    const l = new THREE.Group();
+    l.position.set(x, 0.32, z);
+    l.add(mesh(box(0.08, 0.32, 0.08), fur, 0, -0.16, 0));
+    g.add(l);
+    legs.push(l);
+  }
+  g.userData = { legs, tail, head };
+  return g;
+}
+
+export function animateDog(g, phase) {
+  const { legs, tail, head } = g.userData;
+  legs.forEach((l, i) => { l.rotation.x = Math.sin(phase + (i % 2 ? Math.PI : 0) + (i > 1 ? 0.6 : 0)) * 0.8; });
+  tail.rotation.y = Math.sin(phase * 2) * 0.6;
+  head.position.y = 0.68 + Math.abs(Math.sin(phase)) * 0.04;
+}
+
+/** A soft round shadow (sits just above the ground). */
+const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false });
+const shadowGeo = new THREE.CircleGeometry(0.5, 16).rotateX(-Math.PI / 2);
+export function makeShadow(r = 0.5) {
+  const s = new THREE.Mesh(shadowGeo, shadowMat);
+  s.scale.set(r * 2, 1, r * 2);
+  s.position.y = 0.02;
+  s.renderOrder = 1;
+  return s;
+}

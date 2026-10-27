@@ -16,6 +16,7 @@ export const musicEnabled = () => music;
 export function setSound(on) { sound = on; save(SOUND_KEY, on); apply(); }
 export function setMusic(on) { music = on; save(MUSIC_KEY, on); apply(); }
 export function setPortalMuted(m) { portalMuted = m; apply(); }
+export const isPortalMuted = () => portalMuted;
 
 function apply() {
   if (!ctx) return;
@@ -103,7 +104,9 @@ export function play(e) {
     case 'land': if (e.impact > 4) noise(0.1, { vol: 0.4, freq: 500 }); break;
     case 'slip': tone(900, 0.4, { type: 'sine', vol: 0.12, slide: 0.4 }); break;
     case 'pop': noise(0.06, { vol: 0.6, freq: 5000 }); break;
-    case 'finish': [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.25, { type: 'square', vol: 0.12, delay: i * 0.11 })); break;
+    case 'gameover': noise(0.5, { vol: 0.8, freq: 700 }); [392, 330, 262, 196].forEach((f, i) => tone(f, 0.3, { type: 'square', vol: 0.12, delay: 0.2 + i * 0.14 })); break;
+    case 'bark': tone(520, 0.07, { type: 'sawtooth', vol: 0.14, slide: 0.5 }); tone(480, 0.08, { type: 'sawtooth', vol: 0.12, slide: 0.5, delay: 0.12 }); break;
+    case 'pigeons': for (let i = 0; i < 5; i++) noise(0.05, { vol: 0.2, freq: 2500, delay: i * 0.06 }); break;
     default: break;
   }
 }

@@ -10,4 +10,4 @@ export const TIPS = {
   eggs: 'Eggs! Worth a lot, but they break on hard bumps.',
   goods: 'Steer gently: the pile sways and things fall off.',
 };
-export const SECTION_TOAST = { stairs: 'Stairs!', market: 'Market!', sidewalk: 'Sidewalk!' };
+export const SECTION_TOAST = { stairs: 'Stairs!', market: 'Market!', sidewalk: 'Sidewalk!', street: 'Downhill!' };
