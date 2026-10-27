@@ -140,10 +140,10 @@ export function createWorld(seed, { wanted = [] } = {}) {
 
   // ---- things to grab ----
   const itemWeights = (kind) => (kind === 'market'
-    ? { goods: 46, melon: 18, balloon: 7, oil: 12, eggs: 14, chili: 5 }
+    ? { goods: 46, melon: 18, balloon: 7, oil: 12, eggs: 14 }
     : kind === 'stairs'
-      ? { goods: 54, balloon: 12, eggs: 10, oil: 8, melon: 14, chili: 4 }
-      : { goods: 46, melon: 14, balloon: 8, oil: 14, eggs: 14, chili: 6 });
+      ? { goods: 54, balloon: 12, eggs: 10, oil: 8, melon: 14 }
+      : { goods: 46, melon: 14, balloon: 8, oil: 14, eggs: 14 });
   /** Often something from the list (the shop has what you need, if you can grab it): about two times in three. */
   function itemSpec(kind, forced) {
     let key = forced;

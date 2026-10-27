@@ -61,7 +61,7 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   await frames(page, 10);
   check(await visible(page, '#btn-play'), `${name}: Play button visible`);
   check((await page.textContent('#btn-play')).trim() === 'Play', `${name}: English menu`);
-  check(await page.evaluate(() => document.querySelectorAll('#legend li img').length === 5), `${name}: legend shows the five items`);
+  check(await page.evaluate(() => document.querySelectorAll('#legend li img').length === 4), `${name}: legend shows the four special items`);
   await audit(page, `${name} menu`);
   await page.screenshot({ path: join(SHOTS, `${name}-menu.png`) });
 

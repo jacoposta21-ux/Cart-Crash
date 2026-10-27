@@ -134,15 +134,6 @@ export function makeItem(it) {
       break;
     }
     case 'balloon': g.add(makeBalloon(it.color ?? 0)); break;
-    case 'chili': {
-      const body = mesh(cone(0.11, 0.55, 8), mat('#e5231b'), 0, 0.12, 0);
-      body.rotation.z = Math.PI / 2 + 0.25;
-      g.add(body);
-      const stem = mesh(cyl(0.03, 0.05, 0.12, 6), mat('#3c9a3c'), 0.3, 0.2, 0);
-      stem.rotation.z = Math.PI / 2;
-      g.add(stem);
-      break;
-    }
     case 'goods': g.add((GOODS_MAKERS[it.goods] || GOODS_MAKERS.cereal)()); break;
     default: break;
   }

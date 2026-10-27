@@ -62,7 +62,8 @@ export function resizeRenderer(R, W, H) {
   R.renderer.setSize(W, H, false);
   R.camera.aspect = W / H;
   // Portrait screens see less to the sides: open the lens a bit more.
-  R.camera.fov = W / H < 0.8 ? 74 : W / H < 1.2 ? 66 : 58;
+  R.baseFov = W / H < 0.8 ? 74 : W / H < 1.2 ? 66 : 58;
+  R.camera.fov = R.baseFov + (R.wide || 0) * 12;
   R.camera.updateProjectionMatrix();
 }
 
@@ -119,10 +120,7 @@ export function onEvents(R, g, events, label) {
     const c = g.cart;
     switch (e.type) {
       case 'pickup':
-        if (e.item === 'chili') {
-          text(R, g, c.x, c.y, 2.6, '🔥', label('pickup', e), 'good');
-          burst(R, g, c.x, c.y + 0.6, 2.2, 18, ['#ff3b1f', '#ff9f1c', '#ffd23f'], 3);
-        } else if (e.item === 'balloon') {
+        if (e.item === 'balloon') {
           text(R, g, c.x, c.y, 2.6, '', label('pickup', e), 'meh');
         } else {
           text(R, g, c.x, c.y, 2.6, e.wanted ? '✓' : '+5s', label('pickup', e), e.wanted ? 'good' : 'bad');
@@ -212,8 +210,12 @@ export function render(R, g, dt) {
   const out = g.over ? Math.min(1, g.overT / 1.2) : 0;
   // Close behind the rider: the camera sits just above his cap and climbs with the pile.
   // A tall pile would hide the road, so the camera climbs above it and looks down more.
-  const back = (portrait ? 4.4 : 3.9) + H * 0.4 + out * 3;
-  const up = (portrait ? 3.0 : 2.75) + H * 0.8 + out * 3;
+  // With a dog or the warden on your heels the view widens and pulls back to show them.
+  const chased = g.dogs.some((d) => d.state === 'chase') || g.cops.some((p) => p.state === 'chase');
+  R.wide = (R.wide || 0) + ((chased ? 1 : 0) - (R.wide || 0)) * Math.min(1, dt * 3);
+  if (Math.abs(R.camera.fov - (R.baseFov + R.wide * 12)) > 0.05) { R.camera.fov = R.baseFov + R.wide * 12; R.camera.updateProjectionMatrix(); }
+  const back = (portrait ? 4.4 : 3.9) + H * 0.4 + out * 3 + R.wide * 0.9;
+  const up = (portrait ? 3.0 : 2.75) + H * 0.8 + out * 3 + R.wide * 0.8;
   const ground = R.cartElev;
   const lookY = c.y + (portrait ? 9 : 7) - out * 6;
   const wantPos = v3.set(c.x * 0.85 + w.center(c.y - back) * 0.15, ground + up, -(c.y - back));
@@ -530,7 +532,8 @@ function syncDogs(R, g) {
       animateDog(body, 0);
     } else {
       body.userData.head.rotation.x = 0;
-      obj.rotation.y = d.state === 'leave' ? Math.PI / 2 * Math.sign(d.x - g.world.center(d.y) || 1) : -Math.atan2(g.cart.x - d.x, 4) * 0.6 + Math.PI;
+      // Running down the hill after the cart (the model faces -z), or trotting off to the side.
+      obj.rotation.y = d.state === 'leave' ? -Math.PI / 2 * Math.sign(d.x - g.world.center(d.y) || 1) : -Math.atan2(g.cart.x - d.x, 4) * 0.6;
       animateDog(body, d.run * 16);
     }
   }
@@ -551,8 +554,9 @@ function syncCops(R, g) {
     }
     obj.position.copy(worldPos(g, p.x, p.y));
     const body = obj.userData.body;
-    body.rotation.y = p.state === 'chase' ? Math.PI : p.caught ? Math.PI : 0;
+    body.rotation.y = p.state === 'chase' ? -Math.atan2(g.cart.x - p.x, 4) * 0.5 : Math.PI;
     animateWalker(body, p.run * 12, p.state === 'chase');
+    if (p.state === 'chase') body.rotation.x = -0.25; // leaning into the run
     // one arm up, whistling
     if (p.state === 'chase') body.userData.armR.rotation.x = -2.6 + Math.sin(R.t * 14) * 0.2;
   }

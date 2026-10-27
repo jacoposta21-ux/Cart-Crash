@@ -332,7 +332,7 @@ function updateHud(force) {
 }
 
 function label(kind, e) {
-  if (kind === 'pickup') return e.item === 'balloon' ? t('Balloons') : e.item === 'chili' ? t('Turbo!') : nameOf(e.key);
+  if (kind === 'pickup') return e.item === 'balloon' ? t('Balloons') : nameOf(e.key);
   if (kind === 'crowdhit') return t('Watch out!');
   if (kind === 'caught') return t('Fined!');
   if (kind === 'fall') return e.why === 'full' ? t('No room!') : t('Fell off!');
@@ -352,7 +352,7 @@ function handleEvents(g, events, live) {
     if (e.type === 'pickup' && !shownTips.has(e.item) && TIPS[e.item]) {
       if (e.item !== 'goods' || g.stack.length > 3) { shownTips.add(e.item); showHint(t(TIPS[e.item])); }
     }
-    if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && e.item !== 'chili' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list: +5 seconds at the checkout! Tap Drop to throw the top thing away.') : t('Not on the list: +5 seconds at the checkout! Press E to drop the top thing.'), 3800); }
+    if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list: +5 seconds at the checkout! Tap Drop to throw the top thing away.') : t('Not on the list: +5 seconds at the checkout! Press E to drop the top thing.'), 3800); }
     if (e.type === 'tall') toast(t('What a pile!'));
     if (e.type === 'ramp') toast(t('Wheee!'));
     if (e.type === 'dog') toast(t('Woof!'));

@@ -35,12 +35,15 @@ più breve.
 - **Semafori**: quando ti avvicini diventano gialli e poi rossi, e una folla
   attraversa sulle strisce. Se col rosso **vai addosso a qualcuno**, quella
   persona vola via e ti cade **tutto** il carico (non perdi vite, ma devi
-  riprendere la spesa). Se passi col rosso **senza toccare nessuno**, ti insegue
-  un **vigile** per 10 secondi: ti prende solo se rallenti, e la multa costa una
+  riprendere la spesa). In ogni caso, se passi col rosso ti insegue un
+  **vigile** per 10 secondi: ti prende solo se rallenti, e la multa costa una
   vita. Frena e aspetta il verde.
 - **Passaggi a livello**: campanella, sbarre giù, poi passa il treno. Se sei sui
   binari mentre passa, la gara è finita. Fermati alla linea.
-- **Cani**: quando passi vicino a un cane ti insegue. Se rallenti (per esempio a
+- **Cani e vigile** corrono accanto al carrello, appena dietro, sempre
+  inquadrati (la visuale si allarga mentre ti inseguono). Il cane compare a caso
+  lungo la strada.
+- **Cani**: quando passi vicino a un cane ti insegue per 12 secondi. Se rallenti (per esempio a
   un semaforo) ti raggiunge e ti costa una vita, a meno che tu non gli lasci
   cadere qualcosa: si ferma a mangiarlo e ti lascia stare.
 - **Ostacoli bassi** (transenne, panchine, scatoloni, tubi dei lavori stradali):
@@ -51,7 +54,6 @@ più breve.
 |---|---|
 | Anguria | pesa: il carrello sterza più lento e scende più veloce |
 | Palloncini | alleggeriscono: piccoli salti che scavalcano buche e pozzanghere; non sono mai in lista e non contano come extra; si liberano con Q / **Libera** |
-| Peperoncino | lo mangia il ragazzo: turbo per 3 secondi; non entra nel carrello |
 | Olio d'oliva | scivoli per circa 3 s; anche le pozzanghere d'olio fanno scivolare |
 | Spesa varia (cereali, carta igienica, pomodori, pane, formaggio, bibita, ananas, detersivo) | la pila cresce, ondeggia quando sterzi e se pende troppo l'oggetto in cima cade |
 | Uova | si rompono sui colpi forti (buche, atterraggi, schianti) |

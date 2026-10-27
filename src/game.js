@@ -14,7 +14,6 @@ export const ITEMS = {
   balloon: { value: 15, weight: -0.35, h: 0 },
   oil: { value: 20, weight: 0.45, h: 0.62 },
   eggs: { value: 40, weight: 0.15, h: 0.3 },
-  chili: { value: 0, weight: 0, h: 0 }, // eaten on the spot: never in the cart
 };
 export const GOODS_H = { cereal: 0.62, roll: 0.46, can: 0.38, bread: 0.34, cheese: 0.32, soda: 0.56, pineapple: 0.62, detergent: 0.54 };
 export const itemHeight = (it) => (it.type === 'goods' ? GOODS_H[it.goods] : ITEMS[it.type].h);
@@ -42,11 +41,14 @@ export const TRAIN_LENGTH = 58;
 export const TRAIN_SPEED = 24;
 // Dogs.
 const DOG_SPEED = 10.5;
-// The traffic warden: runs after you for 10 s when you run a red light without hitting anyone.
+// The traffic warden: runs after you for 10 s when you run a red light.
 export const COP_SPEED = 11;
 export const COP_TIME = 10;
-const CHILI_TIME = 3;
-const DOG_GIVE_UP = 28;
+// Chasers run beside the cart, just behind it, where the camera sees them.
+// They keep up with a cart that rolls on and catch one that slows down.
+export const CHASE_GAP = 2.4; // metres behind the cart at most
+const CATCH_GAP = 0.5;
+const DOG_TIME = 12;
 
 const LIST_POOL = ['melon', 'oil', 'eggs', ...GOODS];
 
@@ -84,7 +86,7 @@ export function createGame(seed, opts = {}) {
     checkoutY: null,
     next: 0, // first entity not yet behind the cart
     rand: rng(seed ^ 0x9e3779b9),
-    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false, chili: 0 },
+    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false },
     stack: [], // bottom first: { type, goods?, h, id }
     balloons: [], // { color }
     tilt: 0,
@@ -94,8 +96,8 @@ export function createGame(seed, opts = {}) {
     picked: 0,
     dropped: 0,
     lost: [], // items that fell off, broke, popped or were knocked out
-    dogs: [], // { x, y, t, look, run, state: 'chase' | 'eat' | 'leave', bit }
-    cops: [], // { x, y, t, run, state: 'chase' | 'leave' }
+    dogs: [], // { x, y, gap, side, t, look, run, state: 'chase' | 'fetch' | 'eat' | 'leave', bit }
+    cops: [], // { x, y, gap, side, t, run, state: 'chase' | 'leave', caught }
     events: [],
   };
 }
@@ -145,8 +147,7 @@ export function handling(g) {
 
 /** Rolling speed: faster on steep bits, with a heavy cart, and the further you get. */
 export function targetSpeed(g, kind) {
-  const base = 8 + 4.2 * SECTION[kind].pace + Math.min(8, g.distance / 150) + 0.35 * Math.min(mass(g) - 1, 6);
-  return g.cart.chili > 0 ? base * 1.35 + 2 : base;
+  return 8 + 4.2 * SECTION[kind].pace + Math.min(8, g.distance / 150) + 0.35 * Math.min(mass(g) - 1, 6);
 }
 
 function emit(g, type, data = {}) {
@@ -186,12 +187,6 @@ function pickUp(g, e) {
   if (e.type === 'balloon') {
     g.balloons.push({ color: e.color ?? 0 });
     emit(g, 'pickup', { item: 'balloon', key: 'balloon', x: e.x, y: e.y, wanted: false });
-    return;
-  }
-  if (e.type === 'chili') {
-    // The rider eats it: a burst of speed.
-    g.cart.chili = CHILI_TIME;
-    emit(g, 'pickup', { item: 'chili', key: 'chili', x: e.x, y: e.y, wanted: false });
     return;
   }
   const it = { type: e.type, h: 0, id: e.id };
@@ -307,8 +302,7 @@ export function step(g, dt, input = 0) {
   const target = targetSpeed(g, sec.kind);
   c.braking = Boolean(inp.brake);
   if (c.braking) c.v = Math.max(0, c.v - BRAKE * (c.z <= 0.02 ? 1 : 0.5) * dt);
-  else c.v += (target - c.v) * Math.min(1, (c.v < 5 || c.chili > 0 ? 2.2 : 1.1) * dt);
-  if (c.chili > 0) c.chili -= dt;
+  else c.v += (target - c.v) * Math.min(1, (c.v < 5 ? 1.6 : 1.1) * dt);
   const dy = c.v * dt;
   c.y += dy;
   g.distance = c.y;
@@ -407,7 +401,8 @@ export function step(g, dt, input = 0) {
       emit(g, 'pigeons', { x: e.x, y: e.y });
     } else if (e.kind === 'dog' && !e.chased && c.y > e.y + 1.5) {
       e.chased = true;
-      g.dogs.push({ x: e.x, y: e.y, t: 0, look: e.look, run: 0, state: 'chase' });
+      const side = Math.sign(e.x - w.center(e.y)) || 1;
+      g.dogs.push({ x: e.x, y: e.y, gap: CHASE_GAP, side, t: 0, look: e.look, run: 0, state: 'chase' });
       emit(g, 'dog', {});
     }
   }
@@ -546,11 +541,11 @@ function stepLight(g, e) {
       break;
     }
   }
-  // Through the red without touching anyone: the traffic warden saw you.
-  if (e.ranRed && !e.crowdHit && !e.copSent && c.y > e.y + 3) {
+  // Through the red: the traffic warden saw you, and runs after you.
+  if (e.ranRed && !e.copSent && c.y > stopY + 1) {
     e.copSent = true;
-    const side = g.rand() < 0.5 ? -1 : 1;
-    g.cops.push({ x: g.world.center(e.y) + side * (g.world.halfWidth(e.y) + 0.8), y: e.y - LIGHT_STOP, t: 0, run: 0, state: 'chase' });
+    const side = c.x > g.world.center(c.y) ? -1 : 1;
+    g.cops.push({ x: c.x + side, y: c.y - CHASE_GAP, gap: CHASE_GAP, side, t: 0, run: 0, state: 'chase' });
     emit(g, 'cop', {});
   }
 }
@@ -594,6 +589,32 @@ function stepRail(g, e) {
 export const railBarrierDown = (g, e) => e.state === 'warn' && g.t - e.t0 < RAIL_WARN + TRAIN_TIME + 0.6;
 
 // ---------- dogs ----------
+/**
+ * A chaser (dog or warden) runs at `speed`, a little to one side of the cart and
+ * at most CHASE_GAP behind it, so it is always on screen. Rolling faster than
+ * that keeps it at bay; slowing down lets it close in. Returns true when caught.
+ */
+function chase(g, p, speed, dt) {
+  const c = g.cart;
+  // A running start: full speed after a second and a half.
+  const v = Math.min(speed, 3 + 5 * p.t);
+  p.gap = Math.min(CHASE_GAP, p.gap + (c.v - v) * dt);
+  p.y = c.y - p.gap;
+  const w = g.world;
+  const lim = w.halfWidth(p.y) - 0.3;
+  const want = Math.max(w.center(p.y) - lim, Math.min(w.center(p.y) + lim, c.x + p.side * 1.0));
+  p.x += (want - p.x) * Math.min(1, dt * 5);
+  return !g.over && p.gap < CATCH_GAP && c.z < 0.8;
+}
+
+/** Caught by a dog or the warden: it costs a life (once, with a moment of safety). */
+function caught(g, type) {
+  const c = g.cart;
+  emit(g, type, { lives: g.lives - 1 });
+  if (c.safe <= 0) loseLife(g, type === 'bite' ? 'dog' : 'cop');
+  c.safe = Math.max(c.safe, SAFE_TIME);
+}
+
 function stepDogs(g, dt) {
   const c = g.cart;
   for (const d of g.dogs) {
@@ -601,24 +622,14 @@ function stepDogs(g, dt) {
     d.run += dt;
     if (d.state === 'chase') {
       // A treat on the road beats a cart.
-      const treat = g.world.entities.find((e) => e.kind === 'dropped' && !e.eaten && e.y < c.y && e.y > d.y - 1 && Math.abs(e.y - d.y) < 14);
-      if (treat) {
-        d.target = treat;
-        d.y += Math.min(DOG_SPEED * dt, Math.max(0, treat.y - d.y));
-        d.x += (treat.x - d.x) * Math.min(1, dt * 4);
-        if (Math.abs(treat.y - d.y) < 0.4) { d.state = 'eat'; d.eatT = 0; treat.eaten = true; emit(g, 'dogeats', {}); }
-        continue;
-      }
-      d.y += DOG_SPEED * dt;
-      d.x += (c.x - d.x) * Math.min(1, dt * 3);
-      if (!g.over && c.y - d.y < 0.8 && c.y > d.y && Math.abs(c.x - d.x) < 1.1 && c.z < 0.8) {
-        // Caught: a bite costs a life, then the dog is happy and trots off.
-        d.state = 'leave';
-        d.bit = true;
-        emit(g, 'bite', { lives: g.lives - 1 });
-        if (c.safe <= 0) loseLife(g, 'dog');
-        c.safe = Math.max(c.safe, SAFE_TIME);
-      } else if (c.y - d.y > DOG_GIVE_UP || d.t > 25) d.state = 'leave';
+      const treat = g.world.entities.find((e) => e.kind === 'dropped' && !e.eaten && e.y < c.y && e.y > d.y - 2);
+      if (treat) { d.state = 'fetch'; d.target = treat; continue; }
+      if (chase(g, d, DOG_SPEED, dt)) { d.state = 'leave'; d.bit = true; caught(g, 'bite'); } else if (d.t > DOG_TIME) d.state = 'leave';
+    } else if (d.state === 'fetch') {
+      const treat = d.target;
+      d.y += Math.max(-DOG_SPEED * dt, Math.min(DOG_SPEED * dt, treat.y - d.y));
+      d.x += (treat.x - d.x) * Math.min(1, dt * 4);
+      if (Math.abs(treat.y - d.y) < 0.4) { d.state = 'eat'; d.eatT = 0; treat.eaten = true; emit(g, 'dogeats', {}); }
     } else if (d.state === 'eat') {
       d.eatT += dt;
       if (d.eatT > 3) d.state = 'leave';
@@ -635,18 +646,8 @@ function stepCops(g, dt) {
   for (const p of g.cops) {
     p.t += dt;
     p.run += dt;
-    if (p.state === 'chase') {
-      p.y += COP_SPEED * dt;
-      p.x += (c.x - p.x) * Math.min(1, dt * 3);
-      if (!g.over && c.y - p.y < 0.8 && c.y > p.y && Math.abs(c.x - p.x) < 1.1) {
-        // Caught: a fine that costs a life.
-        p.state = 'leave';
-        p.caught = true;
-        emit(g, 'caught', { lives: g.lives - 1 });
-        if (c.safe <= 0) loseLife(g, 'cop');
-        c.safe = Math.max(c.safe, SAFE_TIME);
-      } else if (p.t > COP_TIME) { p.state = 'leave'; emit(g, 'copgaveup', {}); }
-    }
+    if (p.state !== 'chase') continue;
+    if (chase(g, p, COP_SPEED, dt)) { p.state = 'leave'; p.caught = true; caught(g, 'caught'); } else if (p.t > COP_TIME) { p.state = 'leave'; emit(g, 'copgaveup', {}); }
   }
   g.cops = g.cops.filter((p) => p.y > c.y - 45);
 }

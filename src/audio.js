@@ -84,7 +84,7 @@ function noise(dur, { vol = 0.3, freq = 800, delay = 0 } = {}) {
   src.start(t);
 }
 
-const PICK = { goods: 660, melon: 330, balloon: 880, oil: 520, eggs: 990, chili: 1200 };
+const PICK = { goods: 660, melon: 330, balloon: 880, oil: 520, eggs: 990 };
 export function play(e) {
   if (!ctx) return;
   switch (e.type) {
@@ -93,7 +93,6 @@ export function play(e) {
       if (e.wanted) tone((PICK[e.item] || 600) * 1.5, 0.12, { type: 'square', vol: 0.1, delay: 0.06 });
       if (e.item === 'melon') tone(140, 0.2, { type: 'sine', vol: 0.3, slide: 0.6 });
       if (e.item === 'oil') tone(400, 0.35, { type: 'sine', vol: 0.12, slide: 2.2, delay: 0.05 });
-      if (e.item === 'chili') noise(0.5, { vol: 0.35, freq: 2500, delay: 0.05 });
       break;
     case 'fall': tone(500, 0.3, { type: 'triangle', vol: 0.16, slide: 0.35 }); break;
     case 'break': noise(0.15, { vol: 0.4, freq: 3000 }); tone(300, 0.15, { type: 'square', vol: 0.08, slide: 0.5 }); break;

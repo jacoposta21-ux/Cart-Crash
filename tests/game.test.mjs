@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, step, drainEvents, handling, jolt, result, makeList, listProgress, listDone, isNeeded, extras,
-  LIVES, RIM, MAX_PILE, EXTRA_PENALTY, stackHeight, itemKey, crowdPeople, lightPhase,
+  LIVES, RIM, MAX_PILE, EXTRA_PENALTY, CHASE_GAP, stackHeight, itemKey, crowdPeople, lightPhase,
 } from '../src/game.js';
 import { botSteer } from '../src/bot.js';
 
@@ -212,11 +212,25 @@ test('riding into the crowd on the crossing knocks everything out of the cart', 
   const ev = run(g, 0.1, { brake: true });
   assert.ok(ev.some((e) => e.type === 'crowdhit'));
   assert.equal(g.stack.length, 0);
-  run(g, 3);
-  assert.equal(g.cops.length, 0, 'no warden after hitting the crowd');
+  run(g, 1.5);
+  assert.equal(g.cops.length, 1, 'the warden comes anyway');
 });
 
-test('running a red light past nobody brings the warden: he catches you only if you slow down', () => {
+test('dogs and the warden run just behind the cart, on screen, and never drop out of view while chasing', () => {
+  const g = emptyGame();
+  run(g, 3);
+  put(g, { kind: 'dog', x: g.cart.x + 3, y: g.cart.y + 2, look: 0 });
+  for (let i = 0; i < 6 / DT; i++) {
+    step(g, DT, 0);
+    for (const d of g.dogs) if (d.state === 'chase') {
+      assert.ok(g.cart.y - d.y <= CHASE_GAP + 1e-9 && g.cart.y - d.y >= 0, `gap ${g.cart.y - d.y}`);
+      if (d.t > 1) assert.ok(Math.abs(d.x - g.cart.x) < 1.6, 'beside the cart once it has come in from the pavement');
+    }
+  }
+  assert.equal(g.lives, LIVES);
+});
+
+test('running a red light brings the warden: he catches you only if you slow down', () => {
   const chase = (brakeAfter) => {
     const g = emptyGame();
     put(g, { kind: 'light', x: 0, y: 90, state: 'idle', willRed: true, crowd: 0 });
@@ -240,16 +254,6 @@ test('balloons can be let go one at a time', () => {
   const ev = run(g, DT, { release: true });
   assert.ok(ev.some((e) => e.type === 'release'));
   assert.equal(g.balloons.length, 1);
-});
-
-test('a chili pepper gives a burst of speed and never goes in the cart', () => {
-  const a = emptyGame(), b = emptyGame();
-  run(a, 3); run(b, 3);
-  put(a, { kind: 'item', type: 'chili', x: a.cart.x, y: a.cart.y + 0.4 });
-  run(a, 1.5); run(b, 1.5);
-  assert.ok(a.cart.v > b.cart.v + 3, `${a.cart.v} vs ${b.cart.v}`);
-  assert.equal(a.stack.length, 0);
-  assert.equal(extras(a), 0);
 });
 
 test('the train ends the ride; waiting at the barrier is safe', () => {
