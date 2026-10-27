@@ -18,7 +18,7 @@ const FPS = 30;
 const SPEED = 1.25; // played a little faster than recorded: snappier, and under 30 s
 const INTRO = 1.4, OUTRO = 2.4, END_CARD = 1.3; // seconds of the game's own end screen (with the time)
 const formats = { landscape: [1920, 1080], portrait: [1080, 1620], draft: [640, 360] };
-const which = process.argv[2] ? [process.argv[2]] : Object.keys(formats);
+const which = process.argv[2] ? [process.argv[2]] : ['landscape', 'portrait']; // draft: a quick small check
 
 const server = await startServer(8135, join(ROOT, 'dist'));
 const browser = await chromium.launch({ executablePath: EXECUTABLE, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
