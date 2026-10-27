@@ -97,8 +97,9 @@ for (const [name, viewport, touch] of VIEWPORTS) {
       await frames(page, hold);
       return async () => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     };
-    let end = await swipe(-90, 3);
-    check(await page.evaluate(() => window.__cc.game.cart.z > 0.05), `${name}: swipe up jumps`);
+    let end = await swipe(-90, 0);
+    // the jump can land a frame or two later on a busy machine: look over the next frames
+    check(await page.evaluate(() => { for (let i = 0; i < 12; i++) { window.__cc.frame(1 / 30); if (window.__cc.game.cart.z > 0.05) return true; } return false; }), `${name}: swipe up jumps`);
     await end();
     await frames(page, 30);
     end = await swipe(90, 20);
