@@ -1,10 +1,12 @@
-// The ride itself, without any drawing: the cart, its load and how the load
-// changes the steering. Endless: it goes on until the third big crash.
-// step() is deterministic for a seed and a sequence of steering inputs, so
-// tests can drive whole rides.
-import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH } from './world.js';
+// The ride itself, without any drawing: the cart, its load, the shopping list
+// and how the load changes the steering. A ride is a race: get everything on
+// the list into the cart, then reach the checkout. Three crashes (or the
+// train) and you are out. step() is deterministic for a seed and a sequence
+// of inputs, so tests can drive whole rides.
+import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH, GOODS, LIGHT_STOP } from './world.js';
 
-// value: what it adds to the load. weight: how heavy (balloons lift).
+export { GOODS };
+// value: kept for the effects (a heavy pile is worth more to lose). weight: how heavy (balloons lift).
 // h: height in the pile (balloons fly on strings instead).
 export const ITEMS = {
   goods: { value: 10, weight: 0.3 },
@@ -13,56 +15,111 @@ export const ITEMS = {
   oil: { value: 20, weight: 0.45, h: 0.62 },
   eggs: { value: 40, weight: 0.15, h: 0.3 },
 };
-// Everyday stuff for the pile, each a little different in height.
-export const GOODS = ['cereal', 'roll', 'can', 'bread', 'cheese', 'soda', 'pineapple', 'detergent'];
 export const GOODS_H = { cereal: 0.62, roll: 0.46, can: 0.38, bread: 0.34, cheese: 0.32, soda: 0.56, pineapple: 0.62, detergent: 0.54 };
 export const itemHeight = (it) => (it.type === 'goods' ? GOODS_H[it.goods] : ITEMS[it.type].h);
+/** What a thing is called on the shopping list. */
+export const itemKey = (it) => (it.type === 'goods' ? it.goods : it.type);
 
 export const RIM = 0.62; // the basket holds anything below this height
-export const MAX_PILE = 9; // higher than this, the top just slides off
+export const MAX_PILE = 5.2; // higher than this, the top just slides off: there is no room
 export const CART_R = 0.45;
 export const LIVES = 3;
+export const JUMP_SPEED = 6.8;
 const GRAVITY = 21;
 const OIL_TIME = 3.2;
 const PUDDLE_TIME = 2.2;
 const SAFE_TIME = 1.6; // after a crash, a moment to recover
-const DOG_TIME = 9;
+const BRAKE = 15; // m/s² of braking
+const CHECKOUT_AHEAD = 70;
+// Traffic lights: yellow, then red while a crowd crosses.
+export const YELLOW_TIME = 1.4;
+export const RED_TIME = 4.6;
+// Level crossings: bells and barriers, then the train goes by.
+export const RAIL_WARN = 2.4;
+export const TRAIN_TIME = 3.4;
+export const TRAIN_LENGTH = 58;
+export const TRAIN_SPEED = 24;
+// Dogs.
+const DOG_SPEED = 10.5;
+const DOG_GIVE_UP = 28;
 
-export function createGame(seed) {
+const LIST_POOL = ['melon', 'oil', 'eggs', ...GOODS];
+
+/** A shopping list: `n` different things, 1–2 of each, about 9 in all. */
+export function makeList(seed, n = 7) {
+  const r = rng(seed ^ 0x51ed27);
+  const pool = [...LIST_POOL];
+  const list = [];
+  let total = 0;
+  while (list.length < n) {
+    const key = pool.splice(Math.floor(r() * pool.length), 1)[0];
+    const need = key !== 'melon' && total + 2 + (n - list.length - 1) <= 10 && r() < 0.45 ? 2 : 1;
+    total += need;
+    list.push({ key, need });
+  }
+  return list;
+}
+
+export function createGame(seed, opts = {}) {
+  const list = opts.list || makeList(seed);
   return {
     seed,
-    world: createWorld(seed),
+    list,
+    world: createWorld(seed, { wanted: list.map((l) => l.key) }),
     t: 0,
     over: false,
+    won: false,
+    reason: null, // 'crashes' | 'train' when out
     overT: 0,
+    finishTime: 0,
     distance: 0,
-    score: 0,
-    bestMult: 1,
-    tallest: 0,
     lives: LIVES,
     crashes: 0,
+    checkoutY: null,
     next: 0, // first entity not yet behind the cart
     rand: rng(seed ^ 0x9e3779b9),
-    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0 },
-    stack: [], // bottom first: { type, goods?, h }
+    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false },
+    stack: [], // bottom first: { type, goods?, h, id }
     balloons: [], // { color }
     tilt: 0,
     tiltV: 0,
     wobble: 0, // 0..1+, how close the pile is to tipping
     tallMark: 0,
     picked: 0,
-    lost: [], // items that fell off, broke or popped
-    dog: null, // { x, y, t, look } while a dog runs after the cart
+    dropped: 0,
+    lost: [], // items that fell off, broke, popped or were knocked out
+    dogs: [], // { x, y, t, look, run, state: 'chase' | 'eat' | 'leave', bit }
     events: [],
   };
 }
 
 export const stackHeight = (g) => g.stack.reduce((a, it) => a + it.h, 0);
 export const count = (g, type) => (type === 'balloon' ? g.balloons.length : g.stack.filter((it) => it.type === type).length);
-export const cartValue = (g) => g.stack.reduce((a, it) => a + ITEMS[it.type].value, 0) + g.balloons.length * ITEMS.balloon.value;
-/** Points per metre: 1 with an empty cart, 2 with 100 worth of shopping, and so on. */
-export const multiplier = (g) => 1 + cartValue(g) / 100;
 export const mass = (g) => Math.max(0.55, 1 + g.stack.reduce((a, it) => a + ITEMS[it.type].weight, 0) + g.balloons.length * ITEMS.balloon.weight);
+
+/** For each list line, how many are in the cart now (capped at what is needed). */
+export function listProgress(g) {
+  const have = {};
+  for (const it of g.stack) { const k = itemKey(it); have[k] = (have[k] || 0) + 1; }
+  return g.list.map((l) => ({ ...l, have: Math.min(l.need, have[l.key] || 0) }));
+}
+export const listDone = (g) => listProgress(g).every((l) => l.have >= l.need);
+export const listCount = (g) => listProgress(g).reduce((a, l) => [a[0] + l.have, a[1] + l.need], [0, 0]);
+/** Is one more of this wanted right now? */
+export function wanted(g, key) {
+  const p = listProgress(g).find((l) => l.key === key);
+  return Boolean(p && p.have < p.need);
+}
+
+/** Is this thing in the cart one that the list needs (not junk, not one too many)? */
+export function isNeeded(g, it) {
+  const key = itemKey(it);
+  const line = g.list.find((l) => l.key === key);
+  if (!line) return false;
+  let n = 0;
+  for (const s of g.stack) { if (itemKey(s) === key) n++; if (s === it) break; }
+  return n <= line.need;
+}
 
 /** How the load changes the handling right now (also shown in the HUD). */
 export function handling(g) {
@@ -79,7 +136,7 @@ export function handling(g) {
 
 /** Rolling speed: faster on steep bits, with a heavy cart, and the further you get. */
 export function targetSpeed(g, kind) {
-  return 6.5 + 4.2 * SECTION[kind].pace + Math.min(9, g.distance / 220) + 0.35 * Math.min(mass(g) - 1, 6);
+  return 8 + 4.2 * SECTION[kind].pace + Math.min(8, g.distance / 150) + 0.35 * Math.min(mass(g) - 1, 6);
 }
 
 function emit(g, type, data = {}) {
@@ -90,7 +147,7 @@ function loseTop(g, why, side = 0) {
   const it = g.stack.pop();
   if (!it) return null;
   g.lost.push({ ...it, why });
-  emit(g, 'fall', { item: it, why, side: side || (g.rand() < 0.5 ? -1 : 1), height: stackHeight(g) });
+  emit(g, 'fall', { item: it, why, side: side || (g.rand() < 0.5 ? -1 : 1), height: stackHeight(g), wanted: wanted(g, itemKey(it)) });
   return it;
 }
 
@@ -117,17 +174,30 @@ function pickUp(g, e) {
   e.taken = true;
   g.picked++;
   if (e.type === 'balloon') {
-    g.balloons.push({ color: e.variant % 5 });
-  } else {
-    const it = { type: e.type, h: 0, id: e.id };
-    if (e.type === 'goods') it.goods = GOODS[e.variant % GOODS.length];
-    it.h = itemHeight(it);
-    g.stack.push(it);
-    // Something landing in the basket rocks it a little.
-    g.tiltV += (g.rand() - 0.5) * (0.6 + it.h);
+    g.balloons.push({ color: e.color ?? 0 });
+    emit(g, 'pickup', { item: 'balloon', key: 'balloon', x: e.x, y: e.y, wanted: false });
+    return;
   }
+  const it = { type: e.type, h: 0, id: e.id };
+  if (e.type === 'goods') it.goods = e.goods;
+  it.h = itemHeight(it);
+  const key = itemKey(it);
+  const isWanted = wanted(g, key);
+  g.stack.push(it);
+  // Something landing in the basket rocks it a little.
+  g.tiltV += (g.rand() - 0.5) * (0.6 + it.h);
   if (e.type === 'oil') g.cart.oil = Math.max(g.cart.oil, OIL_TIME);
-  emit(g, 'pickup', { item: e.type, goods: e.type === 'goods' ? GOODS[e.variant % GOODS.length] : null, value: ITEMS[e.type].value, x: e.x, y: e.y });
+  emit(g, 'pickup', { item: e.type, goods: it.goods || null, key, x: e.x, y: e.y, wanted: isWanted });
+  if (stackHeight(g) > MAX_PILE) loseTop(g, 'full');
+}
+
+/** Loses a life (crash or dog bite). Returns true when that was the last one. */
+function loseLife(g, why) {
+  g.lives--;
+  g.crashes++;
+  g.cart.safe = SAFE_TIME;
+  if (g.lives <= 0) { gameOver(g, 'crashes', why); return true; }
+  return false;
 }
 
 function crash(g, e) {
@@ -136,13 +206,10 @@ function crash(g, e) {
   e.knocked = true;
   e.knockT = g.t;
   e.knockDir = Math.sign(e.x - c.x) || 1;
-  c.safe = SAFE_TIME;
   c.v *= 0.5;
   c.vx = -e.knockDir * 4.5;
-  g.lives--;
-  g.crashes++;
-  emit(g, 'crash', { obstacle: e.type, x: e.x, y: e.y, lives: g.lives });
-  if (g.lives <= 0) { gameOver(g); return; }
+  emit(g, 'crash', { obstacle: e.type, x: e.x, y: e.y, lives: g.lives - 1 });
+  if (loseLife(g, e.type)) return;
   if (g.balloons.length && g.rand() < 0.5) {
     const b = g.balloons.pop();
     g.lost.push({ type: 'balloon', why: 'popped', ...b });
@@ -152,49 +219,87 @@ function crash(g, e) {
   jolt(g, 0.75 + o.height * 0.2, 'crash');
 }
 
-function gameOver(g) {
+function gameOver(g, reason, cause) {
+  g.endCount = listCount(g);
   g.over = true;
+  g.reason = reason;
   g.overT = 0;
   g.cart.flip = 0.001;
-  emit(g, 'gameover', { score: Math.floor(g.score) });
+  emit(g, 'gameover', { reason, cause });
 }
 
-/** Advance the ride by dt seconds; steer is -1 (left) .. 1 (right). */
-export function step(g, dt, steer = 0) {
+function win(g) {
+  g.over = true;
+  g.won = true;
+  g.overT = 0;
+  g.finishTime = g.t;
+  emit(g, 'checkout', { time: g.t });
+}
+
+/** Drops the thing on top of the pile behind the cart (to make room, or for a dog). */
+function drop(g) {
+  const it = g.stack.pop();
+  if (!it) return;
+  g.dropped++;
+  const c = g.cart;
+  const e = { id: g.world.nextId++, kind: 'dropped', item: it, x: c.x, y: c.y - 0.6 };
+  insertEntity(g, e);
+  emit(g, 'drop', { item: it, wanted: wanted(g, itemKey(it)) });
+}
+
+function insertEntity(g, e) {
+  const ents = g.world.entities;
+  let i = ents.length;
+  while (i > 0 && ents[i - 1].y > e.y) i--;
+  ents.splice(i, 0, e);
+  if (i < g.next) g.next++;
+}
+
+/**
+ * Advance the ride by dt seconds. input: { steer: -1..1, brake, jump, drop }
+ * (jump and drop are presses: true for the one step they happen), or just a steer number.
+ */
+export function step(g, dt, input = 0) {
+  const inp = typeof input === 'number' ? { steer: input } : input;
+  let steer = inp.steer || 0;
   const c = g.cart;
   const w = g.world;
   g.t += dt;
   if (g.over) {
-    // The cart tips over and slides to a stop; the load goes everywhere.
+    // Out: the cart tips over and the load goes everywhere. Won: it rolls to a stop at the till.
     g.overT += dt;
-    c.v = Math.max(0, c.v - 12 * dt);
+    c.v = Math.max(0, c.v - (g.won ? 9 : 12) * dt);
     c.y += c.v * dt;
     c.vx *= Math.max(0, 1 - 3 * dt);
     c.x += c.vx * dt;
-    c.flip = Math.min(1, c.flip + dt * 2.5);
-    if (g.stack.length && g.rand() < dt * 14) loseTop(g, 'gameover');
-    if (g.balloons.length && g.rand() < dt * 6) { const b = g.balloons.pop(); g.lost.push({ type: 'balloon', why: 'flew', ...b }); emit(g, 'release', { color: b.color }); }
+    if (!g.won) {
+      c.flip = Math.min(1, c.flip + dt * 2.5);
+      if (g.stack.length && g.rand() < dt * 14) loseTop(g, 'gameover');
+      if (g.balloons.length && g.rand() < dt * 6) { const b = g.balloons.pop(); g.lost.push({ type: 'balloon', why: 'flew', ...b }); emit(g, 'release', { color: b.color }); }
+    }
+    if (c.z > 0) { c.vz -= GRAVITY * dt; c.z = Math.max(0, c.z + c.vz * dt); }
+    stepDogs(g, dt);
     return;
   }
   w.ensure(c.y + 160);
   const hd = handling(g);
   const sec = w.sectionAt(c.y);
 
-  // Downhill.
+  // Downhill, unless braking.
   const target = targetSpeed(g, sec.kind);
-  c.v += (target - c.v) * Math.min(1, (c.v < 4 ? 2.4 : 1.1) * dt);
+  c.braking = Boolean(inp.brake);
+  if (c.braking) c.v = Math.max(0, c.v - BRAKE * (c.z <= 0.02 ? 1 : 0.5) * dt);
+  else c.v += (target - c.v) * Math.min(1, (c.v < 5 ? 1.6 : 1.1) * dt);
   const dy = c.v * dt;
   c.y += dy;
   g.distance = c.y;
-  const mult = multiplier(g);
-  g.score += dy * mult;
-  if (mult > g.bestMult) g.bestMult = mult;
 
   // Steering: watermelons slow it down, oil makes the cart slide, in the air there is little grip.
   const airborne = c.z > 0.02;
+  if (c.braking && !airborne) steer *= 0.6;
   const grip = hd.grip * (airborne ? 0.25 : 1);
   const vx0 = c.vx;
-  c.vx += (steer * hd.maxLat - c.vx) * Math.min(1, grip * dt);
+  c.vx += (steer * hd.maxLat * Math.min(1, 0.35 + c.v / 8) - c.vx) * Math.min(1, grip * dt);
   if (c.oil > 0) {
     c.oil -= dt;
     c.spin += (c.vx * 0.35 + 2.2 * Math.sin(g.t * 5)) * dt;
@@ -204,7 +309,12 @@ export function step(g, dt, steer = 0) {
   c.x += c.vx * dt;
   const ax = (c.vx - vx0) / Math.max(dt, 1e-6);
 
-  // Hops (balloons) and jumps (ramps).
+  // Jumps (the player), hops (balloons) and ramps.
+  if (inp.jump && !airborne) {
+    c.vz = JUMP_SPEED;
+    c.z = 0.03;
+    emit(g, 'jump', {});
+  }
   if (c.z > 0 || c.vz > 0) {
     c.vz -= hd.gravity * dt;
     c.z += c.vz * dt;
@@ -212,7 +322,7 @@ export function step(g, dt, steer = 0) {
       const impact = -c.vz;
       c.z = 0; c.vz = 0;
       emit(g, 'land', { impact });
-      if (impact > 3) jolt(g, Math.min(1.1, (impact - 3) * 0.1 + 0.15), 'land');
+      if (impact > 3) jolt(g, Math.min(1.1, (impact - 3) * 0.12 + 0.2), 'land');
     }
   } else if (hd.hopEvery) {
     c.hopIn -= dt;
@@ -222,6 +332,7 @@ export function step(g, dt, steer = 0) {
       emit(g, 'hop', {});
     }
   }
+  if (inp.drop) drop(g);
 
   // The road's edges: curbs, walls and market stalls bounce the cart back.
   c.curbCd -= dt;
@@ -245,41 +356,40 @@ export function step(g, dt, steer = 0) {
   if (sec.kind === 'stairs' && !airborne && s !== c.step) jolt(g, 0.22, 'stairs');
   c.step = s;
 
-  // People crossing, pigeons, a dog.
+  // People, pigeons, dogs, traffic lights and trains ahead.
   const ents = w.entities;
   if (g.next > 200) g.next -= w.prune(c.y - 25);
   while (g.next < ents.length && ents[g.next].y < c.y - 3) g.next++;
-  for (let i = g.next; i < ents.length && ents[i].y < c.y + 30; i++) {
+  for (let i = Math.max(0, g.next - 8); i < ents.length && ents[i].y < c.y + 110; i++) {
     const e = ents[i];
+    if (e.kind === 'light') stepLight(g, e);
+    else if (e.kind === 'rail') stepRail(g, e);
+    if (g.over) return;
+    if (e.y < c.y - 3) continue;
     if (e.type === 'walker' && !e.knocked) {
-      if (!e.going && e.y - c.y < e.wake) e.going = true;
-      if (e.going) {
-        const endX = w.center(e.y) - e.side * (w.halfWidth(e.y) + 1.5);
-        e.x += -e.side * e.speed * dt;
-        e.walk = (e.walk || 0) + dt * e.speed;
-        if ((e.x - endX) * -e.side > 0) e.gone = true;
+      if (e.mode === 'along') {
+        if (!e.going && e.y - c.y < e.wake) e.going = true;
+        if (e.going) { e.y -= e.speed * dt; e.walk = (e.walk || 0) + dt * e.speed; e.x += Math.sin(g.t * 0.8 + e.sway) * 0.4 * dt; }
+      } else {
+        if (!e.going && e.y - c.y < e.wake) e.going = true;
+        if (e.going) {
+          const endX = w.center(e.y) - e.side * (w.halfWidth(e.y) + 1.5);
+          e.x += -e.side * e.speed * dt;
+          e.walk = (e.walk || 0) + dt * e.speed;
+          if ((e.x - endX) * -e.side > 0) e.gone = true;
+        }
       }
     } else if (e.kind === 'pigeons' && !e.flying && e.y - c.y < 7) {
       e.flying = g.t;
       emit(g, 'pigeons', { x: e.x, y: e.y });
-    } else if (e.kind === 'dog' && !e.chased && e.y - c.y < 6) {
+    } else if (e.kind === 'dog' && !e.chased && c.y > e.y + 1.5) {
       e.chased = true;
-      g.dog = { x: e.x, y: e.y, t: DOG_TIME, look: e.look, run: 0 };
+      g.dogs.push({ x: e.x, y: e.y, t: 0, look: e.look, run: 0, state: 'chase' });
       emit(g, 'dog', {});
     }
   }
-  if (g.dog) {
-    // It runs after the cart, a couple of metres behind, then gives up.
-    const d = g.dog;
-    d.t -= dt;
-    const want = d.t > 0 ? c.y - 2.4 - Math.sin(g.t * 2) * 0.6 : d.y;
-    d.y += Math.max(-1, Math.min(1, want - d.y)) * Math.max(c.v * 1.1, 6) * dt;
-    if (d.t <= 0) d.y += dt * 1.5;
-    d.x += (c.x + Math.sin(g.t * 3) * 0.8 - d.x) * Math.min(1, dt * 2.5);
-    d.run += dt;
-    if (d.t > 0 && Math.floor(d.run / 1.6) !== Math.floor((d.run - dt) / 1.6)) emit(g, 'bark', {});
-    if (d.y < c.y - 30) g.dog = null;
-  }
+  stepDogs(g, dt);
+  if (g.over) return;
 
   // What the cart touches.
   for (let i = g.next; i < ents.length && ents[i].y < c.y + 1.5; i++) {
@@ -288,12 +398,14 @@ export function step(g, dt, steer = 0) {
     if (e.kind !== 'item' && e.kind !== 'obstacle') continue;
     const dx = e.x - c.x, dyy = e.y - c.y;
     if (e.kind === 'item') {
-      if (dx * dx + dyy * dyy < 0.78 * 0.78 && c.z < 1.4) pickUp(g, e);
+      if (dx * dx + dyy * dyy < 0.8 * 0.8 && c.z < 1.4) pickUp(g, e);
       continue;
     }
     const o = OBSTACLES[e.type];
-    const rr = o.r + CART_R * 0.85;
-    if (dx * dx + dyy * dyy > rr * rr || c.z > o.height) continue;
+    const hit = o.w
+      ? Math.abs(dx) < o.w + CART_R * 0.8 && Math.abs(dyy) < o.d + 0.45
+      : dx * dx + dyy * dyy < (o.r + CART_R * 0.85) ** 2;
+    if (!hit || c.z > o.height) continue;
     if (o.solid) {
       if (c.safe <= 0) crash(g, e);
       else { e.knocked = true; e.knockT = g.t; e.knockDir = Math.sign(e.x - c.x) || 1; }
@@ -315,24 +427,144 @@ export function step(g, dt, steer = 0) {
   g.tilt += g.tiltV * dt;
   const over = H - RIM;
   if (over <= 0) {
-    // Low loads sit in the basket.
     const cap = 0.1 + over * 0.05;
     if (Math.abs(g.tilt) > cap) { g.tilt = Math.sign(g.tilt) * cap; g.tiltV *= 0.3; }
     g.wobble = Math.abs(g.tilt) / 0.6;
   } else {
     const crit = 0.8 / (1 + 0.12 * over) / (1 + 0.02 * over * over);
     g.wobble = Math.abs(g.tilt) / crit;
-    if (g.wobble > 1 || H > MAX_PILE) {
-      loseTop(g, H > MAX_PILE ? 'full' : 'tipped', Math.sign(g.tilt));
+    if (g.wobble > 1) {
+      loseTop(g, 'tipped', Math.sign(g.tilt));
       g.tilt *= 0.3;
       g.tiltV *= 0.25;
     }
   }
   const H2 = stackHeight(g);
-  if (g.stack.length > g.tallest) g.tallest = g.stack.length;
-  // A new personal tallest pile in this ride (at 3, 5 and 7 metres).
-  const mark = [3, 5, 7].filter((m) => H2 >= m).length;
+  const mark = [2.5, 4].filter((m) => H2 >= m).length;
   if (mark > g.tallMark) { g.tallMark = mark; emit(g, 'tall', { height: H2 }); }
+
+  // The checkout appears once everything on the list is in the cart.
+  const done = listDone(g);
+  if (done && g.checkoutY === null) {
+    g.checkoutY = c.y + CHECKOUT_AHEAD;
+    w.ensure(g.checkoutY + 40);
+    w.clear(g.checkoutY - 12, g.checkoutY + 30);
+    for (const e of w.entities) if ((e.kind === 'light' || e.kind === 'rail') && Math.abs(e.y - g.checkoutY) < 40) e.disabled = true;
+    emit(g, 'listdone', { y: g.checkoutY });
+  } else if (!done && g.checkoutY !== null && c.y < g.checkoutY) {
+    g.checkoutY = null;
+    emit(g, 'listbroken', {});
+  }
+  if (g.checkoutY !== null && c.y >= g.checkoutY) {
+    if (done) win(g);
+    else g.checkoutY = null;
+  }
+}
+
+// ---------- traffic lights ----------
+export function lightPhase(g, e) {
+  if (e.state !== 'cycle') return 'green';
+  const t = g.t - e.t0;
+  if (t < YELLOW_TIME) return 'yellow';
+  if (t < YELLOW_TIME + RED_TIME) return 'red';
+  return 'green';
+}
+
+function stepLight(g, e) {
+  const c = g.cart;
+  const stopY = e.y - LIGHT_STOP;
+  if (e.disabled) return;
+  if (e.state === 'idle' && e.willRed) {
+    // It turns yellow when, at this speed, the cart would get there in the middle of the red.
+    const eta = (stopY - c.y) / Math.max(c.v, 3);
+    if (eta < YELLOW_TIME + 1.6 && stopY > c.y) { e.state = 'cycle'; e.t0 = g.t; emit(g, 'yellow', { y: e.y }); }
+  }
+  if (e.state === 'cycle' && !e.redSaid && lightPhase(g, e) === 'red') { e.redSaid = true; emit(g, 'red', { y: e.y }); }
+  // Crossing the stop line on red: the crowd knocks everything out of the cart.
+  if (!e.passed && c.y >= stopY) {
+    e.passed = true;
+    if (e.state === 'cycle' && lightPhase(g, e) === 'red') {
+      e.ranRed = true;
+      const n = g.stack.length;
+      while (g.stack.length) loseTop(g, 'crowd', g.rand() < 0.5 ? -1 : 1);
+      emit(g, 'ranred', { lost: n });
+      c.v *= 0.6;
+    }
+  }
+}
+
+// ---------- level crossings ----------
+/** Where the train is: { front, back } along x, or null when it is not on the road. */
+export function trainSpan(g, e) {
+  if (e.state !== 'warn') return null;
+  const t = g.t - e.t0 - RAIL_WARN;
+  if (t < 0 || t > TRAIN_TIME + 1) return null;
+  const hw = g.world.halfWidth(e.y) + 6;
+  const start = e.x - e.dir * (hw + 4);
+  const front = start + e.dir * TRAIN_SPEED * t;
+  const back = front - e.dir * TRAIN_LENGTH;
+  return { front, back, min: Math.min(front, back), max: Math.max(front, back) };
+}
+
+function stepRail(g, e) {
+  const c = g.cart;
+  if (e.disabled) return;
+  if (e.state === 'idle') {
+    const eta = (e.y - c.y) / Math.max(c.v, 3);
+    if (eta < RAIL_WARN + 2.6 && e.y > c.y) {
+      e.state = 'warn';
+      e.t0 = g.t;
+      e.dir = g.rand() < 0.5 ? -1 : 1;
+      emit(g, 'bells', { y: e.y });
+    }
+  }
+  if (e.state === 'warn') {
+    const t = g.t - e.t0;
+    if (!e.trainSaid && t > RAIL_WARN - 0.4) { e.trainSaid = true; emit(g, 'train', { y: e.y }); }
+    if (t > RAIL_WARN + TRAIN_TIME + 1.2) e.state = 'done';
+    const span = trainSpan(g, e);
+    if (span && Math.abs(c.y - e.y) < 1.7 && c.x > span.min - 0.6 && c.x < span.max + 0.6) {
+      c.v = 0;
+      gameOver(g, 'train', 'train');
+    }
+  }
+}
+export const railBarrierDown = (g, e) => e.state === 'warn' && g.t - e.t0 < RAIL_WARN + TRAIN_TIME + 0.6;
+
+// ---------- dogs ----------
+function stepDogs(g, dt) {
+  const c = g.cart;
+  for (const d of g.dogs) {
+    d.t += dt;
+    d.run += dt;
+    if (d.state === 'chase') {
+      // A treat on the road beats a cart.
+      const treat = g.world.entities.find((e) => e.kind === 'dropped' && !e.eaten && e.y < c.y && e.y > d.y - 1 && Math.abs(e.y - d.y) < 14);
+      if (treat) {
+        d.target = treat;
+        d.y += Math.min(DOG_SPEED * dt, Math.max(0, treat.y - d.y));
+        d.x += (treat.x - d.x) * Math.min(1, dt * 4);
+        if (Math.abs(treat.y - d.y) < 0.4) { d.state = 'eat'; d.eatT = 0; treat.eaten = true; emit(g, 'dogeats', {}); }
+        continue;
+      }
+      d.y += DOG_SPEED * dt;
+      d.x += (c.x - d.x) * Math.min(1, dt * 3);
+      if (!g.over && c.y - d.y < 0.8 && c.y > d.y && Math.abs(c.x - d.x) < 1.1 && c.z < 0.8) {
+        // Caught: a bite costs a life, then the dog is happy and trots off.
+        d.state = 'leave';
+        d.bit = true;
+        emit(g, 'bite', { lives: g.lives - 1 });
+        if (c.safe <= 0) loseLife(g, 'dog');
+        c.safe = Math.max(c.safe, SAFE_TIME);
+      } else if (c.y - d.y > DOG_GIVE_UP || d.t > 25) d.state = 'leave';
+    } else if (d.state === 'eat') {
+      d.eatT += dt;
+      if (d.eatT > 3) d.state = 'leave';
+    } else {
+      d.x += Math.sign(d.x - g.world.center(d.y) || 1) * 3 * dt;
+    }
+  }
+  g.dogs = g.dogs.filter((d) => d.y > c.y - 40 && Math.abs(d.x - g.world.center(d.y)) < 14);
 }
 
 /** Pops this step's events (for sound and effects). */
@@ -344,14 +576,17 @@ export function drainEvents(g) {
 
 /** The ride's outcome, for the end screen and the records. */
 export function result(g) {
+  const [have, need] = g.won || !g.endCount ? listCount(g) : g.endCount;
   return {
-    score: Math.floor(g.score),
+    won: g.won,
+    reason: g.reason,
+    time: g.won ? g.finishTime : g.t,
     distance: Math.floor(g.distance),
-    bestMult: g.bestMult,
+    have,
+    need,
     picked: g.picked,
-    tallest: g.tallest,
     lost: g.lost.filter((it) => it.why !== 'gameover' && it.why !== 'flew').length,
     broken: g.lost.filter((it) => it.why === 'broke').length,
-    time: g.t,
+    crashes: g.crashes,
   };
 }

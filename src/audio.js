@@ -90,7 +90,7 @@ export function play(e) {
   switch (e.type) {
     case 'pickup':
       tone(PICK[e.item] || 600, 0.09, { type: 'square', vol: 0.12 });
-      tone((PICK[e.item] || 600) * 1.5, 0.12, { type: 'square', vol: 0.1, delay: 0.06 });
+      if (e.wanted) tone((PICK[e.item] || 600) * 1.5, 0.12, { type: 'square', vol: 0.1, delay: 0.06 });
       if (e.item === 'melon') tone(140, 0.2, { type: 'sine', vol: 0.3, slide: 0.6 });
       if (e.item === 'oil') tone(400, 0.35, { type: 'sine', vol: 0.12, slide: 2.2, delay: 0.05 });
       break;
@@ -106,6 +106,17 @@ export function play(e) {
     case 'pop': noise(0.06, { vol: 0.6, freq: 5000 }); break;
     case 'gameover': noise(0.5, { vol: 0.8, freq: 700 }); [392, 330, 262, 196].forEach((f, i) => tone(f, 0.3, { type: 'square', vol: 0.12, delay: 0.2 + i * 0.14 })); break;
     case 'bark': tone(520, 0.07, { type: 'sawtooth', vol: 0.14, slide: 0.5 }); tone(480, 0.08, { type: 'sawtooth', vol: 0.12, slide: 0.5, delay: 0.12 }); break;
+    case 'jump': tone(260, 0.16, { type: 'square', vol: 0.1, slide: 2.4 }); break;
+    case 'drop': tone(420, 0.12, { type: 'triangle', vol: 0.14, slide: 0.6 }); break;
+    case 'yellow': [880, 880].forEach((f, i) => tone(f, 0.12, { type: 'square', vol: 0.09, delay: i * 0.18 })); break;
+    case 'bells': for (let i = 0; i < 8; i++) tone(i % 2 ? 1180 : 1320, 0.14, { type: 'triangle', vol: 0.16, delay: i * 0.3 }); break;
+    case 'train': [196, 247, 196].forEach((f, i) => tone(f, 0.5, { type: 'sawtooth', vol: 0.18, delay: i * 0.08 })); noise(1.8, { vol: 0.35, freq: 300, delay: 0.3 }); break;
+    case 'ranred': noise(0.6, { vol: 0.6, freq: 1200 }); [330, 262, 196].forEach((f, i) => tone(f, 0.18, { type: 'square', vol: 0.12, delay: i * 0.1 })); break;
+    case 'bite': tone(600, 0.06, { type: 'sawtooth', vol: 0.2, slide: 0.4 }); noise(0.15, { vol: 0.5, freq: 1500, delay: 0.05 }); break;
+    case 'dogeats': tone(700, 0.1, { type: 'triangle', vol: 0.1, slide: 1.3 }); break;
+    case 'listdone': [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, { type: 'square', vol: 0.1, delay: i * 0.08 })); break;
+    case 'listbroken': tone(392, 0.25, { type: 'triangle', vol: 0.14, slide: 0.5 }); break;
+    case 'checkout': [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.3, { type: 'square', vol: 0.12, delay: i * 0.12 })); tone(2093, 0.4, { type: 'sine', vol: 0.12, delay: 0.55 }); break;
     case 'pigeons': for (let i = 0; i < 5; i++) noise(0.05, { vol: 0.2, freq: 2500, delay: i * 0.06 }); break;
     default: break;
   }

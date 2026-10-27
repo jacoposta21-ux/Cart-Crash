@@ -1,9 +1,9 @@
 // Cart Crash: screens, input, the game loop, records and the CrazyGames hooks.
 import { BUILD } from './build.js';
-import { createGame, step, drainEvents, result, multiplier, count, handling, LIVES } from './game.js';
+import { createGame, step, drainEvents, result, count, handling, listProgress, LIVES } from './game.js';
 import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon } from './render3d.js';
 import { botSteer } from './bot.js';
-import { t, initI18n, setLang, getLang, LANGS, formatNumber } from './i18n.js';
+import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
 import * as portal from './portal.js';
@@ -14,8 +14,7 @@ const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
 const DT = 1 / 120;
 
-const BEST_KEY = 'cartcrash:best';
-const DIST_KEY = 'cartcrash:bestDistance';
+const BEST_KEY = 'cartcrash:bestTime';
 const SHAKE_KEY = 'cartcrash:shake';
 const RIDES_KEY = 'cartcrash:rides';
 
@@ -23,6 +22,7 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const R = createRenderer(canvas, $('fx'));
 R.reduceShake = load(SHAKE_KEY, true) === false;
+R.label = (s) => t(s);
 
 let mode = 'menu'; // menu | play | paused | end
 let game = null;
@@ -31,9 +31,13 @@ let lastTime = 0;
 let acc = 0;
 let lastSection = null;
 const shownTips = new Set();
-let lastScoreShown = -1;
 const touchMode = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (touchMode) document.documentElement.classList.add('touch');
+
+/** 83.4 → "1:23.4" */
+export const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+const nameOf = (key) => t(GOODS_NAME[key] || ITEM_NAME[key] || key);
+const iconOf = (key) => (GOODS_NAME[key] ? itemIcon('goods', key) : itemIcon(key));
 
 // ---------- size ----------
 function resize() {
@@ -42,36 +46,56 @@ function resize() {
 window.addEventListener('resize', resize);
 
 // ---------- input ----------
-const keys = { left: false, right: false };
-const pointers = new Map();
-function steerInput() {
-  let l = keys.left, r = keys.right;
-  for (const side of pointers.values()) { if (side < 0) l = true; else r = true; }
+// Held: steering and the brake. Pressed: jump and drop (used by the next step).
+const keys = { left: false, right: false, brake: false };
+const pressed = { jump: false, drop: false };
+const pointers = new Map(); // id → { x0, y0, t0, side, brake }
+function readInput() {
+  let l = keys.left, r = keys.right, brake = keys.brake;
+  for (const p of pointers.values()) {
+    if (p.brake) brake = true;
+    else if (p.side < 0) l = true; else r = true;
+  }
+  const out = { steer: (r ? 1 : 0) - (l ? 1 : 0), brake, jump: pressed.jump, drop: pressed.drop };
+  pressed.jump = pressed.drop = false;
   $('touch').querySelector('.tz-left').classList.toggle('on', l);
   $('touch').querySelector('.tz-right').classList.toggle('on', r);
-  return (r ? 1 : 0) - (l ? 1 : 0);
+  return out;
 }
-const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
+const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowDown: 'brake', KeyS: 'brake' };
 window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code) && mode === 'play') e.preventDefault();
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; audio.unlock(); }
+  if (mode === 'play' && !e.repeat) {
+    if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') pressed.jump = true;
+    if (e.code === 'KeyE' || e.code === 'KeyX') pressed.drop = true;
+  }
   if ((e.code === 'Escape' || e.code === 'KeyP') && !e.repeat) {
     if (mode === 'play') pause();
     else if (mode === 'paused' && $('screen-settings').hidden) resume();
   }
 });
 window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+// Touch: hold a side to steer, swipe up to jump, swipe down and hold to brake.
+const SWIPE = 40;
 const sideOf = (x) => (x < window.innerWidth / 2 ? -1 : 1);
 canvas.addEventListener('pointerdown', (e) => {
   audio.unlock();
   if (mode !== 'play') return;
-  pointers.set(e.pointerId, sideOf(e.clientX));
+  pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, t0: performance.now(), side: sideOf(e.clientX), brake: false, jumped: false });
   try { canvas.setPointerCapture(e.pointerId); } catch { /* optional */ }
 });
-canvas.addEventListener('pointermove', (e) => { if (pointers.has(e.pointerId)) pointers.set(e.pointerId, sideOf(e.clientX)); });
+canvas.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId);
+  if (!p) return;
+  const dy = e.clientY - p.y0;
+  if (!p.jumped && !p.brake && dy < -SWIPE && performance.now() - p.t0 < 450) { p.jumped = true; pressed.jump = true; }
+  if (!p.brake && dy > SWIPE) p.brake = true;
+  if (!p.brake) p.side = sideOf(e.clientX);
+});
 for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => pointers.delete(e.pointerId));
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-window.addEventListener('blur', () => { keys.left = keys.right = false; pointers.clear(); if (mode === 'play') pause(); });
+window.addEventListener('blur', () => { keys.left = keys.right = keys.brake = false; pointers.clear(); if (mode === 'play') pause(); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { if (mode === 'play') pause(); audio.suspend(); } else audio.resume();
 });
@@ -81,36 +105,36 @@ function show(id) {
   for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
   $('hud').hidden = !(mode === 'play' || mode === 'paused');
   $('touch').hidden = !(touchMode && mode === 'play');
+  $('btn-drop').hidden = mode !== 'play';
   $('fx').hidden = mode === 'menu';
   const first = id && $(id)?.querySelector('.btn-primary');
   if (first && !touchMode) first.focus({ preventScroll: true });
 }
 
-function icon(type, size, goods) {
+function icon(src, size) {
   const img = document.createElement('img');
-  img.src = itemIcon(type, goods);
+  img.src = src;
   img.alt = '';
   img.width = img.height = size;
   return img;
 }
 
 function renderMenu() {
-  const best = load(BEST_KEY, 0) || 0;
-  const dist = load(DIST_KEY, 0) || 0;
-  $('menu-records').innerHTML = best
-    ? `${t('Best: {n}', { n: `<b>${formatNumber(best)}</b>` })} · ${t('Furthest: {n} m', { n: `<b>${formatNumber(dist)}</b>` })}`
-    : t('How far down can you get?');
+  const best = load(BEST_KEY, null);
+  $('menu-records').innerHTML = best ? t('Best time: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list, reach the checkout, beat the clock.');
   $('legend').replaceChildren(...LEGEND.map((type) => {
     const li = document.createElement('li');
     const b = document.createElement('b'); b.textContent = t(ITEM_NAME[type]);
     const sp = document.createElement('span'); sp.textContent = t(ITEM_EFFECT[type]);
-    li.append(icon(type, 40), b, sp);
+    li.append(icon(itemIcon(type), 40), b, sp);
     return li;
   }));
-  $('rules').textContent = t('The fuller the cart, the more points per metre. Three crashes and it is over.');
+  $('rules').textContent = t('Only what is on the list counts, and the cart fills up fast. Stop at red lights and level crossings. Three crashes and you are out.');
   $('controls-help').innerHTML = touchMode
-    ? t('Hold the left or right side of the screen to steer.')
-    : t('Steer with {keys}', { keys: '<span class="keys"><kbd>←</kbd> <kbd>→</kbd> / <kbd>A</kbd> <kbd>D</kbd></span>' });
+    ? t('Hold left or right to steer. Swipe up to jump, swipe down and hold to brake.')
+    : t('{steer} steer · {brake} brake · {jump} jump · {drop} drop the top thing', {
+      steer: '<kbd>←</kbd><kbd>→</kbd>', brake: '<kbd>↓</kbd>', jump: '<kbd>↑</kbd>', drop: '<kbd>E</kbd>',
+    });
 }
 
 function goMenu() {
@@ -130,13 +154,14 @@ function start() {
   game = createGame(seed);
   setGame(R, game);
   lastSection = 'street';
-  lastScoreShown = -1;
   acc = 0;
   pointers.clear();
+  keys.brake = false;
   mode = 'play';
   show(null);
+  buildList();
   updateHud(true);
-  showHint(touchMode ? t('Hold left or right to steer') : t('Steer with {keys}', { keys: '← →' }), 3500);
+  showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop'), 3500);
   portal.gameplay(true);
   audio.startMusic();
   save(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
@@ -145,7 +170,7 @@ function start() {
 function pause() {
   if (mode !== 'play') return;
   mode = 'paused';
-  keys.left = keys.right = false;
+  keys.left = keys.right = keys.brake = false;
   pointers.clear();
   portal.gameplay(false);
   audio.stopMusic();
@@ -168,53 +193,39 @@ function finish() {
   audio.stopMusic();
   audio.rolling(0, false);
   const r = result(game);
-  const best = load(BEST_KEY, 0) || 0;
-  const isRecord = r.score > best;
-  if (isRecord) save(BEST_KEY, r.score);
-  if (r.distance > (load(DIST_KEY, 0) || 0)) save(DIST_KEY, r.distance);
-  renderEnd(r, isRecord && best > 0);
+  const best = load(BEST_KEY, null);
+  const isRecord = r.won && (best === null || r.time < best);
+  if (isRecord) save(BEST_KEY, r.time);
+  renderEnd(r, isRecord, best);
   show('screen-end');
-  if (isRecord && best > 0) { audio.record(); portal.happytime(); }
+  if (isRecord) { audio.record(); portal.happytime(); }
 }
 
-function endTitle(r) {
-  if (r.distance < 150) return t('Short trip!');
-  if (r.bestMult >= 5) return t('That is not a cart, that is a tower!');
-  if (r.broken >= 3) return t('Scrambled eggs, anyone?');
-  if (r.distance > 1500) return t('All the way to the sea!');
-  if (r.lost > 40) return t('Half the town has your shopping now.');
-  return t('What a ride!');
-}
-
-function renderEnd(r, isRecord) {
-  $('end-title').textContent = endTitle(r);
-  $('end-record').hidden = !isRecord;
-  $('end-dist').textContent = `${formatNumber(r.distance)} m`;
-  $('end-mult').textContent = `×${r.bestMult.toFixed(1)}`;
-  $('end-pile').textContent = t('{n} things', { n: r.tallest });
-  const best = load(BEST_KEY, 0) || 0;
-  $('end-best').innerHTML = t('Best: {n}', { n: `<b>${formatNumber(best)}</b>` });
-  const el = $('end-score');
-  const target = r.score;
-  const t0 = performance.now();
-  const tick = (now) => {
-    const k = Math.min(1, (now - t0) / 900);
-    el.textContent = formatNumber(Math.round(target * (1 - (1 - k) ** 3)));
-    if (k < 1 && mode === 'end') requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
+function renderEnd(r, isRecord, prevBest) {
+  const title = r.won
+    ? (isRecord && prevBest !== null ? t('New record!') : t('Checkout!'))
+    : r.reason === 'train' ? t('Hit by the train!') : t('Three crashes: you are out!');
+  $('end-title').textContent = title;
+  $('end-record').hidden = !(isRecord && prevBest !== null);
+  $('end-score').textContent = r.won ? formatTime(r.time) : `${r.have}/${r.need}`;
+  $('end-score-label').textContent = r.won ? t('your time') : t('on the list');
+  $('end-dist').textContent = `${Math.floor(r.distance)} m`;
+  $('end-crashes').textContent = String(r.crashes);
+  $('end-lost').textContent = String(r.lost);
+  const best = load(BEST_KEY, null);
+  $('end-best').innerHTML = best ? t('Best time: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list and reach the checkout to set a time.');
 }
 
 // ---------- HUD ----------
 let toastTimer = null;
-function toast(text) {
+function toast(text, kind = '') {
   const el = $('toast');
   el.textContent = text;
-  el.classList.remove('show');
+  el.className = `toast ${kind}`;
   void el.offsetWidth;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 1100);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 1300);
 }
 
 let hintTimer = null;
@@ -229,26 +240,49 @@ function showHint(text, ms = 3200) {
 function chip(type, text, warn) {
   const c = document.createElement('span');
   c.className = `chip${warn ? ' warn' : ''}`;
-  c.append(icon(type, 26), text);
+  c.append(icon(itemIcon(type), 26), text);
   return c;
 }
 
+function buildList() {
+  $('hud-list').replaceChildren(...game.list.map((l) => {
+    const li = document.createElement('li');
+    li.dataset.key = l.key;
+    li.title = nameOf(l.key);
+    const n = document.createElement('b');
+    li.append(icon(iconOf(l.key), 30), n);
+    return li;
+  }));
+  listKey = '';
+}
+
 let chipsKey = '';
+let listKey = '';
 let livesShown = -1;
 function updateHud(force) {
   const g = game;
-  const score = Math.floor(g.score);
-  if (force || score !== lastScoreShown) { $('hud-score').textContent = formatNumber(score); lastScoreShown = score; }
-  const m = multiplier(g);
-  const mult = $('hud-mult');
-  const mText = `×${m.toFixed(1)}`;
-  if (mult.textContent !== mText) {
-    mult.classList.remove('up', 'down');
-    void mult.offsetWidth;
-    if (!force) mult.classList.add(parseFloat(mult.textContent.slice(1)) < m ? 'up' : 'down');
-    mult.textContent = mText;
+  $('hud-time').textContent = formatTime(g.won ? g.finishTime : g.t);
+  const prog = listProgress(g);
+  const lk = prog.map((p) => p.have).join() + getLang();
+  if (force || lk !== listKey) {
+    listKey = lk;
+    const items = $('hud-list').children;
+    prog.forEach((p, i) => {
+      const li = items[i];
+      li.querySelector('b').textContent = p.have >= p.need ? '✓' : `${p.have}/${p.need}`;
+      li.classList.toggle('done', p.have >= p.need);
+      li.setAttribute('aria-label', `${nameOf(p.key)} ${p.have}/${p.need}`);
+    });
   }
-  $('hud-dist').textContent = `${formatNumber(Math.floor(g.distance))} m`;
+  const goal = $('hud-goal');
+  if (g.checkoutY !== null && !g.over) {
+    goal.textContent = t('Checkout in {n} m', { n: Math.max(0, Math.ceil(g.checkoutY - g.cart.y)) });
+    goal.className = 'goal go';
+  } else {
+    const [have, need] = prog.reduce((a, p) => [a[0] + p.have, a[1] + p.need], [0, 0]);
+    goal.textContent = t('List: {have}/{need}', { have, need });
+    goal.className = 'goal';
+  }
   if (force || livesShown !== g.lives) {
     livesShown = g.lives;
     const lives = $('hud-lives');
@@ -262,10 +296,12 @@ function updateHud(force) {
   const melons = count(g, 'melon'), balloons = g.balloons.length;
   const oil = g.cart.oil > 0 ? Math.ceil(g.cart.oil) : 0;
   const wobbly = g.wobble > 0.65 && g.stack.length > 2;
-  const key = `${melons}|${balloons}|${oil}|${wobbly}|${getLang()}`;
+  const dog = g.dogs.some((d) => d.state === 'chase' && g.cart.y - d.y < 8);
+  const key = `${melons}|${balloons}|${oil}|${wobbly}|${dog}|${getLang()}`;
   if (key === chipsKey && !force) return;
   chipsKey = key;
   const chips = [];
+  if (dog) { const c = document.createElement('span'); c.className = 'chip warn'; c.textContent = t('Dog behind! Drop something!'); chips.push(c); }
   if (melons) chips.push(chip('melon', `${t('Heavy')} ×${melons}`));
   if (balloons) chips.push(chip('balloon', `${t('Floaty')} ×${balloons}`));
   if (oil) chips.push(chip('oil', `${t('Slippery')} ${oil}s`, true));
@@ -274,34 +310,46 @@ function updateHud(force) {
 }
 
 function label(kind, e) {
-  if (kind === 'pickup') return t(e.item === 'goods' ? GOODS_NAME[e.goods] : ITEM_NAME[e.item]);
+  if (kind === 'pickup') return e.item === 'balloon' ? t('Balloons') : nameOf(e.key);
   if (kind === 'fall') return e.why === 'full' ? t('No room!') : t('Fell off!');
   if (kind === 'break') return t('Eggs broke!');
   if (kind === 'crash') return e.obstacle === 'walker' ? t('Sorry!') : t('Crash!');
+  if (kind === 'drop') return nameOf(e.item.type === 'goods' ? e.item.goods : e.item.type);
+  if (kind === 'ranred') return t('Red light!');
+  if (kind === 'bite') return t('Ouch!');
   return '';
 }
 
 function handleEvents(g, events, live) {
-  onEvents(R, g, live ? events : events.filter((e) => e.type !== 'pickup' && e.type !== 'fall' && e.type !== 'break' && e.type !== 'crash'), label);
+  const quiet = new Set(['pickup', 'fall', 'break', 'crash', 'drop', 'ranred', 'bite']);
+  onEvents(R, g, live ? events : events.filter((e) => !quiet.has(e.type)), label);
   if (!live) return;
   for (const e of events) {
     audio.play(e);
-    if (e.type === 'pickup' && !shownTips.has(e.item)) {
+    if (e.type === 'pickup' && !shownTips.has(e.item) && TIPS[e.item]) {
       if (e.item !== 'goods' || g.stack.length > 3) { shownTips.add(e.item); showHint(t(TIPS[e.item])); }
     }
+    if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list! It only takes up room. Tap Drop to throw the top thing away.') : t('Not on the list! It only takes up room. Press E to drop the top thing.'), 3800); }
     if (e.type === 'tall') toast(t('What a pile!'));
     if (e.type === 'ramp') toast(t('Wheee!'));
     if (e.type === 'dog') toast(t('Woof!'));
-    if (e.type === 'crash' && e.lives === 1) showHint(t('Careful: one more crash and it is over!'), 2500);
+    if (e.type === 'yellow') toast(t('Red light ahead: brake!'), 'warn');
+    if (e.type === 'bells') toast(t('Train coming: stop!'), 'warn');
+    if (e.type === 'ranred') showHint(t('You ran the red light: the crowd knocked everything out of the cart!'), 3500);
+    if (e.type === 'bite') showHint(t('The dog caught you! Drop something next time to keep it busy.'), 3200);
+    if (e.type === 'dogeats') toast(t('Good dog!'));
+    if (e.type === 'listdone') toast(t('Got everything! To the checkout!'), 'go');
+    if (e.type === 'listbroken') showHint(t('Something on the list fell off: get another one!'), 3000);
+    if (e.type === 'crash' && e.lives === 1) showHint(t('Careful: one more crash and you are out!'), 2500);
   }
 }
 
 // ---------- loop ----------
-function simulate(g, dt, steerFn, live) {
+function simulate(g, dt, inputFn, live) {
   acc += Math.min(dt, 0.1);
   while (acc >= DT) {
     acc -= DT;
-    step(g, DT, steerFn());
+    step(g, DT, inputFn());
     handleEvents(g, drainEvents(g), live);
   }
 }
@@ -314,12 +362,12 @@ function newDemo() {
 function frame(dt) {
   if (mode === 'play' && game) {
     const autopilot = params.has('autopilot');
-    simulate(game, dt, () => (autopilot ? botSteer(game) : steerInput()), true);
+    simulate(game, dt, () => (autopilot ? botSteer(game) : readInput()), true);
     const sec = game.world.sectionAt(game.cart.y + 12).kind;
-    if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec]) toast(t(SECTION_TOAST[sec])); }
+    if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && game.checkoutY === null) toast(t(SECTION_TOAST[sec])); }
     audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.over);
     updateHud(false);
-    if (game.over && game.overT > 1.6) finish();
+    if (game.over && game.overT > (game.won ? 2.2 : 1.6)) finish();
     render(R, game, dt);
   } else if (mode === 'end' && game) {
     step(game, Math.min(dt, 0.05), 0);
@@ -380,6 +428,7 @@ function translatePage() {
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll('[data-i18n-label]')) el.setAttribute('aria-label', t(el.dataset.i18nLabel));
   document.title = 'Cart Crash';
+  $('btn-drop').querySelector('small').hidden = touchMode;
   updateSoundButton();
 }
 
@@ -398,6 +447,7 @@ function wire() {
   on('set-sound', () => { audio.setSound(!audio.soundEnabled()); syncToggles(); });
   on('set-music', () => { audio.setMusic(!audio.musicEnabled()); syncToggles(); });
   on('set-shake', () => { R.reduceShake = !R.reduceShake; save(SHAKE_KEY, !R.reduceShake); syncToggles(); });
+  $('btn-drop').addEventListener('pointerdown', (e) => { e.preventDefault(); if (mode === 'play') pressed.drop = true; });
   for (const btn of document.querySelectorAll('[data-sound-toggle]')) {
     btn.addEventListener('click', () => {
       audio.unlock();
@@ -411,6 +461,7 @@ function wire() {
     await initI18n(null, e.target.value);
     translatePage();
     chipsKey = '';
+    listKey = '';
   });
 }
 
@@ -437,11 +488,12 @@ if (TEST) {
     start,
     pause,
     frame: (dt = 1 / 30) => frame(dt),
-    /** Simulates `seconds` of riding at once (the bot drives unless steer is given). */
-    run(seconds, steer = null) {
+    press: (what) => { pressed[what] = true; },
+    /** Simulates `seconds` of riding at once (the bot drives unless an input is given). */
+    run(seconds, input = null) {
       const n = Math.round(seconds / DT);
       for (let i = 0; i < n && mode === 'play'; i++) {
-        step(game, DT, steer === null ? botSteer(game) : steer);
+        step(game, DT, input === null ? botSteer(game) : input);
         handleEvents(game, drainEvents(game), false);
         if (game.over && game.overT > 1.6) { finish(); break; }
       }
@@ -449,6 +501,14 @@ if (TEST) {
     },
     /** Ends the ride now (three crashes' worth). */
     crashOut() { game.lives = 1; game.cart.safe = 0; const e = { kind: 'obstacle', type: 'bin', x: game.cart.x, y: game.cart.y + 0.3, id: -1 }; game.world.entities.splice(game.next, 0, e); },
+    /** Fills the cart with the whole list (the checkout then appears ahead). */
+    fillList() {
+      game.world.clear(game.cart.y + 1, game.cart.y + 400); // a clear road to the checkout
+      for (const l of game.list) for (let i = 0; i < l.need; i++) {
+        const it = ['melon', 'oil', 'eggs'].includes(l.key) ? { type: l.key } : { type: 'goods', goods: l.key };
+        game.stack.push({ ...it, h: 0.3, id: 9000 + game.stack.length });
+      }
+    },
     handling: () => handling(game),
     portalMuted: () => audio.isPortalMuted(),
     /** A still for covers and icons: a ride `seconds` in, without the HUD, with the logo if `title`. */

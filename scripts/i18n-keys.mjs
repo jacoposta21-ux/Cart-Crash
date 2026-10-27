@@ -9,7 +9,7 @@ export function i18nKeys() {
   const keys = new Set();
   for (const f of readdirSync(join(ROOT, 'src')).filter((n) => n.endsWith('.js'))) {
     const src = readFileSync(join(ROOT, 'src', f), 'utf8');
-    for (const m of src.matchAll(/\b(?:t|text)\('((?:[^'\\]|\\.)+)'/g)) keys.add(m[1].replace(/\\'/g, "'"));
+    for (const m of src.matchAll(/(?:\bt|\btext|\.label)\('((?:[^'\\]|\\.)+)'/g)) keys.add(m[1].replace(/\\'/g, "'"));
   }
   const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
   for (const m of html.matchAll(/data-i18n(?:-label)?="([^"]+)"/g)) keys.add(m[1]);

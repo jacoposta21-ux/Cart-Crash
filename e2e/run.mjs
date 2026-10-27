@@ -84,12 +84,52 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   }
   const x1 = await page.evaluate(() => window.__cc.game.cart.x);
   check(x1 > x0 + 0.3, `${name}: steering right moves the cart right (${x0.toFixed(2)} → ${x1.toFixed(2)})`);
+
+  // Jump and brake: keys on a desktop, swipes on a touch screen.
+  const v0 = await page.evaluate(() => window.__cc.game.cart.v);
+  if (touch) {
+    const cdp = await ctx.newCDPSession(page);
+    const swipe = async (dy, hold) => {
+      const x = viewport.width * 0.3, y = viewport.height * 0.6;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      for (let i = 1; i <= 4; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + (dy * i) / 4 }] });
+      await page.waitForTimeout(100); // touch moves arrive with the next animation frame
+      await frames(page, hold);
+      return async () => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    let end = await swipe(-90, 3);
+    check(await page.evaluate(() => window.__cc.game.cart.z > 0.05), `${name}: swipe up jumps`);
+    await end();
+    await frames(page, 30);
+    end = await swipe(90, 20);
+    check(await page.evaluate(() => window.__cc.game.cart.braking), `${name}: swipe down and hold brakes`);
+    const v1 = await page.evaluate(() => window.__cc.game.cart.v);
+    check(v1 < v0 - 3, `${name}: braking slows the cart (${v0.toFixed(1)} → ${v1.toFixed(1)})`);
+    await end();
+  } else {
+    await page.keyboard.press('ArrowUp');
+    await frames(page, 3);
+    check(await page.evaluate(() => window.__cc.game.cart.z > 0.05), `${name}: ↑ jumps`);
+    await frames(page, 30);
+    await page.keyboard.down('ArrowDown');
+    await frames(page, 20);
+    const v1 = await page.evaluate(() => window.__cc.game.cart.v);
+    check(v1 < v0 - 3, `${name}: ↓ brakes (${v0.toFixed(1)} → ${v1.toFixed(1)})`);
+    await page.keyboard.up('ArrowDown');
+  }
+  // Drop the top thing.
+  await page.evaluate(() => { window.__cc.game.stack.push({ type: 'goods', goods: 'can', h: 0.38, id: 777 }); });
+  const n0 = await page.evaluate(() => window.__cc.game.stack.length);
+  if (touch) await page.tap('#btn-drop'); else await page.keyboard.press('KeyE');
+  await frames(page, 2);
+  check(await page.evaluate(() => window.__cc.game.stack.length) === n0 - 1, `${name}: drop throws the top thing away`);
+
   await page.evaluate(() => window.__cc.run(25));
   await frames(page, 10);
-  const hud = await page.evaluate(() => ({ score: document.querySelector('#hud-score').textContent, mult: document.querySelector('#hud-mult').textContent, dist: document.querySelector('#hud-dist').textContent, lives: document.querySelectorAll('#hud-lives .life').length }));
-  check(parseInt(hud.score.replace(/\D/g, ''), 10) > 100, `${name}: score counts up (${hud.score})`);
-  check(/^×\d+\.\d$/.test(hud.mult), `${name}: multiplier shown (${hud.mult})`);
-  check(/\d+ m$/.test(hud.dist), `${name}: distance shown (${hud.dist})`);
+  const hud = await page.evaluate(() => ({ time: document.querySelector('#hud-time').textContent, list: document.querySelectorAll('#hud-list li').length, goal: document.querySelector('#hud-goal').textContent, lives: document.querySelectorAll('#hud-lives .life').length }));
+  check(/^\d:\d\d\.\d$/.test(hud.time) && hud.time !== '0:00.0', `${name}: the clock runs (${hud.time})`);
+  check(hud.list === 7, `${name}: the shopping list shows 7 things`);
+  check(/\d+\/\d+|\d+ m/.test(hud.goal), `${name}: list progress shown (${hud.goal})`);
   check(hud.lives === 3, `${name}: three lives shown`);
   await audit(page, `${name} ride`);
   await page.screenshot({ path: join(SHOTS, `${name}-ride.png`) });
@@ -108,17 +148,30 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   check(await page.evaluate(() => window.__cc.mode) === 'end', `${name}: the third crash ends the ride`);
   await page.waitForTimeout(1000);
   check(await visible(page, '#screen-end'), `${name}: end screen visible`);
-  const end = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, dist: document.querySelector('#end-dist').textContent, best: localStorage.getItem('cartcrash:best') }));
-  check(parseInt(end.score.replace(/\D/g, ''), 10) > 0 && Number(end.best) > 0, `${name}: score shown and saved (${end.score}, best ${end.best})`);
+  const end = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, dist: document.querySelector('#end-dist').textContent }));
+  check(/^\d+\/\d+$/.test(end.score), `${name}: knocked out: list progress shown (${end.score})`);
   check(/\d+ m/.test(end.dist), `${name}: distance on the end screen`);
   await audit(page, `${name} end`);
   await page.screenshot({ path: join(SHOTS, `${name}-end.png`) });
   await page.click('#btn-again');
   check(await page.evaluate(() => window.__cc.mode) === 'play', `${name}: Play again starts a new ride`);
+  // Fill the list: the checkout appears, reaching it gives a time and a record.
+  await page.evaluate(() => { window.__cc.fillList(); window.__cc.run(0.2, { steer: 0 }); });
+  await frames(page, 4);
+  check(/m$/.test(await page.textContent('#hud-goal')), `${name}: the checkout distance shows when the list is done`);
+  await page.evaluate(() => window.__cc.run(12, { steer: 0 }));
+  await frames(page, 80);
+  check(await page.evaluate(() => window.__cc.mode) === 'end', `${name}: reaching the checkout ends the race`);
+  await page.waitForTimeout(300);
+  const won = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, best: localStorage.getItem('cartcrash:bestTime') }));
+  check(/^\d:\d\d\.\d$/.test(won.score) && Number(won.best) > 0, `${name}: winning time shown and saved (${won.score}, ${won.best})`);
+  await page.screenshot({ path: join(SHOTS, `${name}-win.png`) });
+  await audit(page, `${name} win`);
+  await page.click('#btn-again');
   await page.evaluate(() => window.__cc.pause());
   await page.click('#btn-quit');
   check(await page.evaluate(() => window.__cc.mode) === 'menu', `${name}: back to the menu`);
-  check((await page.textContent('#menu-records')).includes('Best'), `${name}: the record is on the menu`);
+  check((await page.textContent('#menu-records')).includes('Best time'), `${name}: the best time is on the menu`);
 
   // Settings and languages.
   await page.click('#btn-settings');

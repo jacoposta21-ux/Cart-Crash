@@ -1,13 +1,13 @@
 // Words the game shows for each thing and place (English keys for t()).
 export const ITEM_NAME = { goods: 'Groceries', melon: 'Watermelon', balloon: 'Balloons', oil: 'Olive oil', eggs: 'Eggs' };
 export const GOODS_NAME = { cereal: 'Cereal', roll: 'Toilet roll', can: 'Tomatoes', bread: 'Bread', cheese: 'Cheese', soda: 'Soda', pineapple: 'Pineapple', detergent: 'Detergent' };
-export const ITEM_EFFECT = { melon: 'Heavy: slow to steer', balloon: 'Light: little hops', oil: 'Slippery for a while', goods: 'The pile wobbles', eggs: 'Worth a lot, break on bumps' };
+export const ITEM_EFFECT = { melon: 'Heavy: slow to steer', balloon: 'Light: little hops', oil: 'Slippery for a while', goods: 'The pile wobbles', eggs: 'Break on bumps' };
 export const LEGEND = ['melon', 'balloon', 'oil', 'goods', 'eggs'];
 export const TIPS = {
   melon: 'Watermelon! The cart is heavier and slower to steer.',
   balloon: 'Balloons! Little hops: you fly over holes and puddles.',
   oil: 'Olive oil! Slippery for a few seconds.',
-  eggs: 'Eggs! Worth a lot, but they break on hard bumps.',
+  eggs: 'Eggs! They break on hard bumps.',
   goods: 'Steer gently: the pile sways and things fall off.',
 };
-export const SECTION_TOAST = { stairs: 'Stairs!', market: 'Market!', sidewalk: 'Sidewalk!', street: 'Downhill!' };
+export const SECTION_TOAST = { stairs: 'Stairs!', market: 'Market!', sidewalk: 'Sidewalk!' };

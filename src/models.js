@@ -184,6 +184,9 @@ export function makeCart() {
     wheel.rotation.z = Math.PI / 2;
     g.add(wheel);
   }
+  // A little step at the back for the rider to stand on.
+  bar(0.9, 0.04, 0.38, 0, 0.24, D / 2 + 0.3);
+  bar(0.04, 0.2, 0.04, -0.4, 0.15, D / 2 + 0.15); bar(0.04, 0.2, 0.04, 0.4, 0.15, D / 2 + 0.15);
   // Handle with the red grip, nearest to the camera.
   bar(t, 0.35, t, -W / 2, y0 + H + 0.1, D / 2 + 0.12);
   bar(t, 0.35, t, W / 2, y0 + H + 0.1, D / 2 + 0.12);
@@ -259,8 +262,144 @@ export function makeObstacle(type) {
       g.add(stripe);
       break;
     }
+    case 'barrier': {
+      // Road-works barrier: two feet and a red-and-white board.
+      for (const x of [-0.9, 0.9]) { g.add(mesh(box(0.08, 0.75, 0.08), mat('#555b66'), x, 0.375, 0)); g.add(mesh(box(0.1, 0.06, 0.5), mat('#333842'), x, 0.03, 0)); }
+      for (let i = 0; i < 6; i++) g.add(mesh(box(0.31, 0.26, 0.05), mat(i % 2 ? '#ffffff' : '#e63946'), -0.78 + i * 0.31, 0.6, 0));
+      break;
+    }
+    case 'bench': {
+      for (let i = 0; i < 3; i++) g.add(mesh(box(1.7, 0.05, 0.13), mat('#a0703f'), 0, 0.46 + (i === 2 ? 0.25 : 0), -0.18 + i * 0.16 + (i === 2 ? 0.02 : 0)));
+      for (const x of [-0.7, 0.7]) { g.add(mesh(box(0.06, 0.46, 0.45), mat('#2f3640'), x, 0.23, 0)); g.add(mesh(box(0.06, 0.3, 0.06), mat('#2f3640'), x, 0.6, 0.18)); }
+      break;
+    }
+    case 'boxes': {
+      g.add(mesh(box(0.95, 0.42, 0.8), mat('#c89b62'), 0, 0.21, 0));
+      g.add(mesh(box(0.6, 0.28, 0.5), mat('#b98a52'), 0.12, 0.56, 0.05));
+      g.add(mesh(box(0.97, 0.06, 0.15), mat('#e8d7b0'), 0, 0.3, 0.33));
+      break;
+    }
+    case 'pipe': {
+      const p = mesh(cyl(0.24, 0.24, 3.0, 12), mat('#f28c28'), 0, 0.24, 0);
+      p.rotation.z = Math.PI / 2;
+      g.add(p);
+      for (const x of [-1.5, 1.5]) { const rim = mesh(cyl(0.27, 0.27, 0.08, 12), mat('#b85f12'), x, 0.24, 0); rim.rotation.z = Math.PI / 2; g.add(rim); }
+      break;
+    }
     default: break;
   }
+  return g;
+}
+
+/** The rider: a kid in a hoodie and a backwards cap, standing on the back of the cart. */
+export function makeRider() {
+  const g = new THREE.Group();
+  const hoodie = mat('#ff7a2f'), jeans = mat('#30507a'), skin = mat('#f1c27d'), shoe = mat('#ffffff');
+  const hips = new THREE.Group();
+  hips.position.set(0, 0.95, 0);
+  g.add(hips);
+  const legL = new THREE.Group(), legR = new THREE.Group();
+  for (const [leg, x] of [[legL, -0.12], [legR, 0.12]]) {
+    leg.position.set(x, 0, 0);
+    leg.add(mesh(box(0.16, 0.7, 0.18), jeans, 0, -0.35, 0));
+    leg.add(mesh(box(0.17, 0.09, 0.28), shoe, 0, -0.68, -0.05));
+    hips.add(leg);
+  }
+  const torso = new THREE.Group();
+  hips.add(torso);
+  torso.add(mesh(box(0.46, 0.55, 0.28), hoodie, 0, 0.28, 0));
+  torso.add(mesh(box(0.3, 0.16, 0.12), mat('#e8641c'), 0, 0.2, -0.15));
+  const head = new THREE.Group();
+  head.position.set(0, 0.7, 0);
+  head.add(mesh(box(0.28, 0.3, 0.28), skin, 0, 0, 0));
+  head.add(mesh(box(0.3, 0.12, 0.3), mat('#e63946'), 0, 0.15, 0));
+  head.add(mesh(box(0.22, 0.04, 0.16), mat('#e63946'), 0, 0.11, 0.2)); // the peak, backwards
+  head.add(mesh(box(0.3, 0.08, 0.08), mat('#3b2a20'), 0, 0.02, 0.12));
+  torso.add(head);
+  const armL = new THREE.Group(), armR = new THREE.Group();
+  for (const [arm, x] of [[armL, -0.29], [armR, 0.29]]) {
+    arm.position.set(x, 0.5, 0);
+    arm.add(mesh(box(0.12, 0.5, 0.13), hoodie, 0, -0.25, 0));
+    arm.add(mesh(box(0.1, 0.1, 0.1), skin, 0, -0.53, 0));
+    torso.add(arm);
+  }
+  g.userData = { hips, legL, legR, torso, head, armL, armR };
+  return g;
+}
+
+/** Pose: lean (-1..1 sideways), crouch (0..1, braking), air (0..1, jumping), cheer (0..1), t (seconds). */
+export function poseRider(r, { lean = 0, crouch = 0, air = 0, cheer = 0, fall = 0, t = 0 }) {
+  const { hips, legL, legR, torso, head, armL, armR } = r.userData;
+  hips.position.y = 0.95 - crouch * 0.22 + air * 0.05;
+  hips.rotation.z = -lean * 0.12;
+  torso.rotation.x = -0.35 - crouch * 0.35 + air * 0.15;
+  torso.rotation.z = -lean * 0.18;
+  legL.rotation.x = crouch * 0.5 + air * 0.6; legR.rotation.x = crouch * 0.5 - air * 0.3;
+  // Arms on the handle; up in the air when cheering or flying.
+  const up = Math.max(cheer, air * 0.8);
+  armL.rotation.x = -1.1 * (1 - up) - 3.0 * up; armR.rotation.x = -1.1 * (1 - up) - 3.0 * up + Math.sin(t * 10) * 0.2 * cheer;
+  armL.rotation.z = 0.15 * up; armR.rotation.z = -0.15 * up;
+  head.rotation.y = lean * 0.3;
+  head.rotation.x = 0.25 + crouch * 0.2;
+  r.rotation.z = -fall * 1.3;
+}
+
+export function makeTrafficLight() {
+  const g = new THREE.Group();
+  g.add(mesh(cyl(0.07, 0.08, 3.2, 8), mat('#2f3640'), 0, 1.6, 0));
+  g.add(mesh(box(0.38, 1.05, 0.3), mat('#1f232b'), 0, 3.6, 0));
+  const lamps = {};
+  [['red', 3.92], ['yellow', 3.6], ['green', 3.28]].forEach(([name, y]) => {
+    const m = new THREE.MeshBasicMaterial({ color: '#333333' });
+    const l = new THREE.Mesh(sph(0.12, 10, 8), m);
+    l.position.set(0, y, 0.15);
+    g.add(l);
+    lamps[name] = m;
+  });
+  // A small one for pedestrians, facing the street.
+  g.userData = { lamps };
+  return g;
+}
+
+export const LAMP_ON = { red: '#ff2a2a', yellow: '#ffcc00', green: '#2bff6a' };
+
+export function makeRailBarrier() {
+  const g = new THREE.Group();
+  g.add(mesh(box(0.25, 1.1, 0.25), mat('#e8e8e8'), 0, 0.55, 0));
+  const arm = new THREE.Group();
+  arm.position.set(0, 1.0, 0);
+  for (let i = 0; i < 8; i++) arm.add(mesh(box(0.55, 0.1, 0.08), mat(i % 2 ? '#ffffff' : '#e63946'), 0.3 + i * 0.55, 0, 0));
+  g.add(arm);
+  // Two red lamps that flash in turn.
+  const lampA = new THREE.MeshBasicMaterial({ color: '#441111' }), lampB = new THREE.MeshBasicMaterial({ color: '#441111' });
+  g.add(mesh(box(0.7, 0.08, 0.08), mat('#222222'), 0, 1.75, 0));
+  const a = new THREE.Mesh(sph(0.12, 8, 6), lampA); a.position.set(-0.28, 1.75, 0.08); g.add(a);
+  const b = new THREE.Mesh(sph(0.12, 8, 6), lampB); b.position.set(0.28, 1.75, 0.08); g.add(b);
+  g.add(mesh(cyl(0.05, 0.05, 1.8, 6), mat('#2f3640'), 0, 0.9, -0.2));
+  g.userData = { arm, lampA, lampB };
+  return g;
+}
+
+/** A regional train: three cars along x, the front at x = 0, running towards +x. */
+export function makeTrain() {
+  const g = new THREE.Group();
+  const carLen = 18.5;
+  for (let i = 0; i < 3; i++) {
+    const x = -i * (carLen + 0.6) - carLen / 2;
+    g.add(mesh(box(carLen, 2.6, 2.9), mat(i === 0 ? '#2a9d8f' : '#f1f1ee'), x, 1.9, 0));
+    g.add(mesh(box(carLen, 0.4, 2.95), mat('#2a9d8f'), x, 1.0, 0));
+    g.add(mesh(box(carLen - 1, 0.7, 2.96), mat('#26323d'), x, 2.45, 0));
+    g.add(mesh(box(carLen, 0.25, 2.7), mat('#9aa3ad'), x, 3.3, 0));
+    for (const wx of [-carLen / 2 + 2.5, carLen / 2 - 2.5]) for (const z of [-1.1, 1.1]) {
+      const w = mesh(cyl(0.45, 0.45, 0.25, 10), mat('#1d1d22'), x + wx, 0.45, z);
+      w.rotation.x = Math.PI / 2;
+      g.add(w);
+    }
+  }
+  // The nose, with headlights.
+  g.add(mesh(box(1.2, 2.2, 2.7), mat('#2a9d8f'), 0.4, 1.7, 0));
+  g.add(mesh(box(0.1, 0.25, 0.4), mat('#fffbe0', { basic: true }), 1.02, 1.2, -0.8));
+  g.add(mesh(box(0.1, 0.25, 0.4), mat('#fffbe0', { basic: true }), 1.02, 1.2, 0.8));
   return g;
 }
 

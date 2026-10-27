@@ -25,13 +25,12 @@
   </div>
 
   <header id="hud" class="hud" hidden>
-    <div class="hud-score">
-      <span class="hud-label" data-i18n="Score">Score</span>
-      <b id="hud-score">0</b>
+    <div class="hud-left">
+      <ul id="hud-list" class="shop-list" aria-label="Shopping list" data-i18n-label="Shopping list"></ul>
+      <span id="hud-goal" class="goal"></span>
     </div>
     <div class="hud-mid">
-      <span id="hud-mult" class="mult">×1.0</span>
-      <span id="hud-dist" class="dist">0 m</span>
+      <span id="hud-time" class="timer">0:00.0</span>
     </div>
     <div class="hud-right">
       <span id="hud-lives" class="lives" aria-label="Lives"></span>
@@ -41,13 +40,14 @@
     </div>
     <div id="hud-chips" class="chips" aria-live="polite"></div>
   </header>
+  <button id="btn-drop" class="drop-btn" type="button" hidden><span data-i18n="Drop">Drop</span><small>E</small></button>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="hint" class="hint" hidden></div>
 
   <section id="screen-menu" class="screen screen-menu" aria-labelledby="title" hidden>
     <div class="menu-card">
       <h1 id="title" class="logo"><span>Cart</span><span>Crash</span></h1>
-      <p class="tagline" data-i18n="Ride a shopping cart down an endless hill. Everything you grab changes how you steer.">Ride a shopping cart down an endless hill. Everything you grab changes how you steer.</p>
+      <p class="tagline" data-i18n="Race a shopping cart down the hill: grab what is on your list and reach the checkout first.">Race a shopping cart down the hill: grab what is on your list and reach the checkout first.</p>
       <button id="btn-play" class="btn btn-primary btn-big" type="button" data-i18n="Play">Play</button>
       <p id="menu-records" class="records"></p>
       <ul id="legend" class="legend"></ul>
@@ -78,12 +78,12 @@
   <section id="screen-end" class="screen" aria-labelledby="end-title" hidden>
     <div class="card card-end">
       <h2 id="end-title"></h2>
-      <p class="score-wrap"><b id="end-score" class="score">0</b><span data-i18n="points">points</span></p>
+      <p class="score-wrap"><b id="end-score" class="score">0</b><span id="end-score-label"></span></p>
       <p id="end-record" class="badge" hidden data-i18n="New record!">New record!</p>
       <dl class="end-stats">
         <div><dt data-i18n="Distance">Distance</dt><dd id="end-dist"></dd></div>
-        <div><dt data-i18n="Best multiplier">Best multiplier</dt><dd id="end-mult"></dd></div>
-        <div><dt data-i18n="Tallest pile">Tallest pile</dt><dd id="end-pile"></dd></div>
+        <div><dt data-i18n="Crashes">Crashes</dt><dd id="end-crashes"></dd></div>
+        <div><dt data-i18n="Lost">Lost</dt><dd id="end-lost"></dd></div>
       </dl>
       <p id="end-best" class="records"></p>
       <div class="row">

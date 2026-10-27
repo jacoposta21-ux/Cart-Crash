@@ -1,13 +1,14 @@
 // The 3D view: a camera behind the cart, the town built section by section,
 // and everything that moves (the cart and its pile, things on the road,
-// people, pigeons, the dog, flying debris and little effects).
+// people, pigeons, dogs, traffic lights, trains, the checkout, flying debris
+// and little effects).
 import * as THREE from '../vendor/three/three.module.min.js';
-import { GOODS, itemHeight, stackHeight } from './game.js';
-import { OBSTACLES } from './world.js';
+import { itemHeight, stackHeight, wanted, lightPhase, trainSpan, railBarrierDown } from './game.js';
+import { OBSTACLES, SECTION, LIGHT_STOP, RAIL_STOP } from './world.js';
 import { buildSection } from './town.js';
 import {
   makeItem, makeBalloon, makeCart, makeObstacle, makeWalker, animateWalker, makePigeon, makeDog, animateDog,
-  makeShadow, mat, BASKET_Y, HANDLE,
+  makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain,
 } from './models.js';
 
 const SKY = '#a8dcf5';
@@ -34,7 +35,10 @@ export function createRenderer(canvas, fxLayer) {
     cart: null,
     pile: new Map(),
     balloons: [],
-    dog: null,
+    dogs: new Map(),
+    checkout: null,
+    dropping: new Set(),
+    label: (s) => s,
     debris: [],
     parts: [],
     texts: [],
@@ -74,7 +78,10 @@ export function setGame(R, g) {
   for (const tx of R.texts) tx.el.remove();
   R.texts = [];
   if (R.cart) R.scene.remove(R.cart.root);
-  if (R.dog) { R.scene.remove(R.dog); R.dog = null; }
+  for (const d of R.dogs.values()) R.scene.remove(d);
+  R.dogs.clear();
+  if (R.checkout) { R.scene.remove(R.checkout); R.checkout = null; }
+  R.dropping.clear();
   R.pile.clear();
   R.balloons = [];
   R.broken.clear();
@@ -84,11 +91,14 @@ export function setGame(R, g) {
   const body = makeCart();
   const pile = new THREE.Group();
   body.add(pile);
+  const rider = makeRider();
+  rider.position.set(0, 0.26, 1.02);
+  body.add(rider);
   const shadow = makeShadow(0.8);
-  shadow.scale.set(1.3, 1, 1.7);
+  shadow.scale.set(1.3, 1, 2.1);
   root.add(shadow, body);
   R.scene.add(root);
-  R.cart = { root, body, pile, shadow };
+  R.cart = { root, body, pile, shadow, rider, cheer: 0 };
   R.cartElev = g.world.elevation(g.cart.y);
   R.camPos.set(NaN, 0, 0);
   R.camLook.set(NaN, 0, 0);
@@ -106,8 +116,20 @@ export function onEvents(R, g, events, label) {
     const c = g.cart;
     switch (e.type) {
       case 'pickup':
-        text(R, g, c.x, c.y, 2.4, `+${e.value}`, label('pickup', e), 'good');
-        burst(R, g, e.x, e.y, 0.6, 10, ['#fff08a', '#ffffff', '#ffd23f'], 3);
+        text(R, g, c.x, c.y, 2.6, e.wanted ? '✓' : '', label('pickup', e), e.wanted ? 'good' : 'meh');
+        burst(R, g, e.x, e.y, 0.6, e.wanted ? 14 : 6, e.wanted ? ['#3ddc84', '#ffffff', '#ffd23f'] : ['#ffffff', '#cccccc'], 3);
+        if (e.wanted) R.cart.cheer = 1;
+        break;
+      case 'drop': R.dropping.add(e.item.id); text(R, g, c.x, c.y, 2.4, '', label('drop', e), 'meh'); break;
+      case 'ranred':
+        bump(R, 0.5);
+        text(R, g, c.x, c.y, 3.6, label('ranred', e), '', 'bad big');
+        break;
+      case 'bite': bump(R, 0.35); text(R, g, c.x, c.y, 3.2, label('bite', e), '', 'bad big'); break;
+      case 'listdone': R.cart.cheer = 1.5; burst(R, g, c.x, c.y, 2.5, 30, ['#3ddc84', '#ffd23f', '#ffffff', '#3fb6ff'], 5); break;
+      case 'checkout':
+        R.cart.cheer = 3;
+        burst(R, g, c.x, c.y + 2, 3, 60, ['#ff4f6d', '#ffcf3a', '#3fb6ff', '#8f6bff', '#3ddc84'], 7);
         break;
       case 'fall': text(R, g, c.x, c.y, 3, '', label('fall', e), 'bad'); break;
       case 'break':
@@ -165,7 +187,8 @@ export function render(R, g, dt) {
   syncSections(R, g);
   syncEntities(R, g);
   syncCart(R, g, dt);
-  syncDog(R, g);
+  syncDogs(R, g);
+  syncCheckout(R, g);
   updateDebris(R, g, dt);
   updateParts(R, dt);
 
@@ -174,16 +197,18 @@ export function render(R, g, dt) {
   const portrait = R.W / R.H < 0.8;
   // After the last crash the camera rises and pulls back to show the mess.
   const out = g.over ? Math.min(1, g.overT / 1.2) : 0;
-  const back = (portrait ? 6.2 : 5.6) + H * 0.35 + out * 3;
-  const up = (portrait ? 3.6 : 3.3) + H * 0.5 + out * 3;
+  // Close behind the rider: the camera sits just above his cap and climbs with the pile.
+  // A tall pile would hide the road, so the camera climbs above it and looks down more.
+  const back = (portrait ? 4.4 : 3.9) + H * 0.4 + out * 3;
+  const up = (portrait ? 3.0 : 2.75) + H * 0.8 + out * 3;
   const ground = R.cartElev;
-  const lookY = c.y + (portrait ? 10 : 7) - out * 6;
-  const wantPos = v3.set(c.x * 0.75 + w.center(c.y - back) * 0.25, ground + up, -(c.y - back));
+  const lookY = c.y + (portrait ? 9 : 7) - out * 6;
+  const wantPos = v3.set(c.x * 0.85 + w.center(c.y - back) * 0.15, ground + up, -(c.y - back));
   // Far off (a new ride, a jump in time): go straight there instead of flying through the houses.
   if (Number.isNaN(R.camPos.x) || dt === 0 || R.camPos.distanceToSquared(wantPos) > 144) R.camPos.copy(wantPos); else R.camPos.lerp(wantPos, Math.min(1, dt * 6));
   // Do not dip below the road behind (stairs drop fast).
   R.camPos.y = Math.max(R.camPos.y, w.elevation(c.y - back) + 1.5);
-  const look = new THREE.Vector3(c.x * 0.6 + w.center(lookY) * 0.4, w.elevation(lookY) + 0.8 + H * 0.15, -lookY);
+  const look = new THREE.Vector3(c.x * 0.7 + w.center(lookY) * 0.3, w.elevation(lookY) + 0.9 - H * 0.1, -lookY);
   if (Number.isNaN(R.camLook.x) || dt === 0 || R.camLook.distanceToSquared(look) > 144) R.camLook.copy(look); else R.camLook.lerp(look, Math.min(1, dt * 8));
   if (R.closeup) {
     // A three-quarter close-up of the cart and its pile (for the app icon).
@@ -224,13 +249,15 @@ function syncSections(R, g) {
 }
 
 const ringGeo = new THREE.RingGeometry(0.42, 0.52, 24).rotateX(-Math.PI / 2);
-const ringMat = new THREE.MeshBasicMaterial({ color: '#ffe25a', transparent: true, opacity: 0.85, depthWrite: false });
+const ringMat = new THREE.MeshBasicMaterial({ color: '#3ddc84', transparent: true, opacity: 0.95, depthWrite: false });
+const junkRingMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.45, depthWrite: false });
+const arrowGeo = new THREE.ConeGeometry(0.16, 0.3, 4).rotateX(Math.PI);
 const stringMat = new THREE.LineBasicMaterial({ color: '#5a4e48' });
 
-function makeEntityObj(e) {
+function makeEntityObj(R, g, e) {
   const root = new THREE.Group();
   if (e.kind === 'item') {
-    const inner = makeItem({ type: e.type, goods: GOODS[e.variant % GOODS.length], color: e.variant % 5 });
+    const inner = makeItem(e);
     if (e.type === 'balloon') {
       inner.position.y = 0.9;
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, 0), new THREE.Vector3(0, 0.9, 0)]), stringMat);
@@ -241,8 +268,20 @@ function makeEntityObj(e) {
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.position.y = 0.03;
     ring.renderOrder = 2;
-    root.add(makeShadow(0.4), ring, inner);
-    root.userData = { inner, ring };
+    // A green arrow over the things still on the list.
+    const arrow = new THREE.Mesh(arrowGeo, mat('#3ddc84', { basic: true }));
+    root.add(makeShadow(0.4), ring, inner, arrow);
+    root.userData = { inner, ring, arrow };
+  } else if (e.kind === 'dropped') {
+    const inner = makeItem(e.item);
+    inner.rotation.set(0.2, hashf(e.id, 4) * 6, 1.3);
+    inner.position.y = 0.15;
+    root.add(makeShadow(0.35), inner);
+    root.userData = { inner };
+  } else if (e.kind === 'light') {
+    root.add(buildCrossing(g, e));
+  } else if (e.kind === 'rail') {
+    root.add(buildRail(g, e));
   } else if (e.kind === 'obstacle') {
     const inner = e.type === 'walker' ? makeWalker(e.look) : makeObstacle(e.type);
     const o = OBSTACLES[e.type];
@@ -274,7 +313,7 @@ function syncEntities(R, g) {
     let o = R.objs.get(e.id);
     if (e.taken || (e.gone && e.type === 'walker')) { if (o) { R.scene.remove(o.obj); R.objs.delete(e.id); } continue; }
     if (!o) {
-      const obj = makeEntityObj(e);
+      const obj = makeEntityObj(R, g, e);
       if (!obj) continue;
       R.scene.add(obj);
       o = { obj, e };
@@ -287,7 +326,18 @@ function syncEntities(R, g) {
     if (e.kind === 'item') {
       ud.inner.position.y = (e.type === 'balloon' ? 0.9 : 0.12) + Math.sin(R.t * 3 + e.id) * 0.08;
       ud.inner.rotation.y = R.t * 1.6 + e.id;
-      ud.ring.scale.setScalar(1 + Math.sin(R.t * 5 + e.id) * 0.08);
+      const want = e.type !== 'balloon' && wanted(g, e.type === 'goods' ? e.goods : e.type);
+      ud.ring.material = want ? ringMat : junkRingMat;
+      ud.ring.scale.setScalar(1 + Math.sin(R.t * 5 + e.id) * 0.08 * (want ? 1.5 : 0.5));
+      ud.arrow.visible = want;
+      ud.arrow.position.y = 1.35 + Math.sin(R.t * 6 + e.id) * 0.12;
+      ud.arrow.rotation.y = R.t * 3;
+    } else if (e.kind === 'light') {
+      obj.rotation.x = -Math.atan(SECTION[w.sectionAt(e.y).kind].drop);
+      updateCrossing(R, g, e, obj);
+    } else if (e.kind === 'rail') {
+      obj.rotation.x = -Math.atan(SECTION[w.sectionAt(e.y).kind].drop);
+      updateRail(R, g, e, obj);
     } else if (e.type === 'walker') {
       const inner = ud.inner;
       if (e.knocked) {
@@ -299,9 +349,10 @@ function syncEntities(R, g) {
         animateWalker(inner, 0, false);
         if (t > 1.4) e.gone = true;
       } else {
-        inner.rotation.y = e.going ? (e.side > 0 ? Math.PI / 2 : -Math.PI / 2) : (e.side > 0 ? Math.PI / 2 + 0.4 : -Math.PI / 2 - 0.4);
+        if (e.mode === 'along') inner.rotation.y = Math.PI;
+        else inner.rotation.y = e.going ? (e.side > 0 ? Math.PI / 2 : -Math.PI / 2) : (e.side > 0 ? Math.PI / 2 + 0.4 : -Math.PI / 2 - 0.4);
         animateWalker(inner, (e.walk || 0) * 5.5, e.going);
-        if (!e.going) obj.position.y += 0.14;
+        if (!e.going && e.mode !== 'along') obj.position.y += 0.14;
       }
     } else if (e.kind === 'obstacle' && e.knocked) {
       const t = Math.min(1, g.t - e.knockT);
@@ -348,8 +399,13 @@ function syncCart(R, g, dt) {
   body.rotation.y = Math.sin(c.spin) * 0.5;
   body.rotation.z = -c.vx * 0.012 - c.flip * 1.6;
   body.position.x = c.flip * 0.5;
-  shadow.scale.set(1.3 * Math.max(0.4, 1 - c.z * 0.2), 1, 1.7 * Math.max(0.4, 1 - c.z * 0.2));
-  shadow.position.y = 0.02;
+  shadow.scale.set(1.3 * Math.max(0.4, 1 - c.z * 0.2), 1, 2.1 * Math.max(0.4, 1 - c.z * 0.2));
+  shadow.position.set(0, 0.02, 0.25);
+  R.cart.cheer = Math.max(0, R.cart.cheer - dt * 1.5);
+  poseRider(R.cart.rider, {
+    lean: Math.max(-1, Math.min(1, c.vx / 5)), crouch: c.braking ? 1 : 0, air: Math.min(1, c.z * 1.5),
+    cheer: Math.min(1, R.cart.cheer), fall: c.flip, t: R.t,
+  });
 
   // The pile: one model per thing in the stack, bending with the tilt.
   const current = new Set(g.stack);
@@ -363,7 +419,11 @@ function syncCart(R, g, dt) {
       const side = Math.sign(g.tilt) || (Math.random() < 0.5 ? -1 : 1);
       const broken = R.broken.has(it.id);
       if (broken) obj.scale.multiplyScalar(0.6);
-      R.debris.push({ obj, v: new THREE.Vector3(side * (2 + Math.random() * 2.5), 2.5 + Math.random() * 2, c.v * 0.35 + (Math.random() - 0.5) * 2), spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, side * 6), life: 4, broken });
+      if (R.dropping.has(it.id)) {
+        // Dropped on purpose: it just tumbles off the back (the road shows it from now on).
+        R.dropping.delete(it.id);
+        R.debris.push({ obj, v: new THREE.Vector3(0, 1.5, 3 + c.v * 0.2), spin: new THREE.Vector3(4, 0, 0), life: 0.35 });
+      } else R.debris.push({ obj, v: new THREE.Vector3(side * (2 + Math.random() * 2.5), 2.5 + Math.random() * 2, c.v * 0.35 + (Math.random() - 0.5) * 2), spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, side * 6), life: 4, broken });
       if (broken) splat(R, g, c.x + (Math.random() - 0.5) * 0.6, c.y - 0.5);
       R.pile.delete(it);
     }
@@ -436,19 +496,176 @@ function splat(R, g, x, y) {
   R.debris.push({ obj: grp, v: new THREE.Vector3(), spin: new THREE.Vector3(), life: 8, decal: true });
 }
 
-function syncDog(R, g) {
-  const d = g.dog;
-  if (!d) { if (R.dog) { R.scene.remove(R.dog); R.dog = null; } return; }
-  if (!R.dog) {
-    R.dog = new THREE.Group();
-    const body = makeDog(d.look);
-    R.dog.add(makeShadow(0.45), body);
-    R.dog.userData.body = body;
-    R.scene.add(R.dog);
+function syncDogs(R, g) {
+  const live = new Set(g.dogs);
+  for (const [d, obj] of R.dogs) if (!live.has(d)) { R.scene.remove(obj); R.dogs.delete(d); }
+  for (const d of g.dogs) {
+    let obj = R.dogs.get(d);
+    if (!obj) {
+      obj = new THREE.Group();
+      const body = makeDog(d.look);
+      obj.add(makeShadow(0.45), body);
+      obj.userData.body = body;
+      R.scene.add(obj);
+      R.dogs.set(d, obj);
+    }
+    obj.position.copy(worldPos(g, d.x, d.y));
+    const body = obj.userData.body;
+    if (d.state === 'eat') {
+      obj.rotation.y = Math.PI;
+      body.userData.head.rotation.x = 0.6 + Math.sin(R.t * 12) * 0.15;
+      animateDog(body, 0);
+    } else {
+      body.userData.head.rotation.x = 0;
+      obj.rotation.y = d.state === 'leave' ? Math.PI / 2 * Math.sign(d.x - g.world.center(d.y) || 1) : -Math.atan2(g.cart.x - d.x, 4) * 0.6 + Math.PI;
+      animateDog(body, d.run * 16);
+    }
   }
-  R.dog.position.copy(worldPos(g, d.x, d.y));
-  R.dog.rotation.y = d.t > 0 ? -Math.atan2(g.cart.x - d.x, 4) * 0.6 : Math.PI;
-  animateDog(R.dog.userData.body, d.run * 16);
+}
+
+// ---------- zebra crossing with traffic lights ----------
+function buildCrossing(g, e) {
+  const grp = new THREE.Group();
+  const w = g.world;
+  const hw = w.halfWidth(e.y);
+  const white = mat('#f4f1e8');
+  for (let x = -hw + 0.4; x < hw - 0.2; x += 1.0) grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.03, 3), white).translateX(x).translateY(0.02).translateZ(-1));
+  const stop = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 0.03, 0.35), white);
+  stop.position.set(0, 0.02, LIGHT_STOP);
+  grp.add(stop);
+  const lights = [];
+  for (const side of [-1, 1]) {
+    const tl = makeTrafficLight();
+    tl.position.set(side * (hw + 0.5), 0.14, LIGHT_STOP - 0.3);
+    grp.add(tl);
+    lights.push(tl);
+  }
+  const crowd = [];
+  for (let i = 0; i < e.crowd; i++) {
+    const p = makeWalker((e.id * 7 + i * 13) % 64);
+    p.visible = false;
+    grp.add(p);
+    crowd.push(p);
+  }
+  grp.userData = { lights, crowd, hw };
+  return grp;
+}
+
+function updateCrossing(R, g, e, obj) {
+  const grp = obj.children[0];
+  const { lights, crowd, hw } = grp.userData;
+  obj.position.x = g.world.center(e.y);
+  const phase = e.disabled ? 'green' : lightPhase(g, e);
+  for (const tl of lights) for (const k of ['red', 'yellow', 'green']) tl.userData.lamps[k].color.set(k === phase ? LAMP_ON[k] : '#333333');
+  // During the red, a crowd crosses from both sides.
+  const t = e.state === 'cycle' ? g.t - e.t0 - 1.4 : -1;
+  crowd.forEach((p, i) => {
+    const dir = i % 2 ? 1 : -1;
+    const delay = (i * 0.37) % 1.2;
+    const speed = 1.6 + (i % 3) * 0.25;
+    const x = -dir * (hw + 1.5) + dir * speed * (t - delay);
+    p.visible = t > delay && Math.abs(x) < hw + 1.6;
+    p.position.set(x, 0, -1 - 1.2 + (i % 4) * 0.7);
+    p.rotation.y = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+    if (e.ranRed && g.cart.y > e.y - LIGHT_STOP) p.rotation.z = Math.sin(i + R.t * 9) * 0.25; // shaking fists
+    animateWalker(p, (t - delay) * 9, true);
+  });
+}
+
+// ---------- level crossing ----------
+function buildRail(g, e) {
+  const grp = new THREE.Group();
+  const hw = g.world.halfWidth(e.y);
+  const len = hw * 2 + 40;
+  const steel = mat('#8c939c'), wood = mat('#6b4f36');
+  for (const z of [-0.72, 0.72]) grp.add(new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.1), steel).translateY(0.07).translateZ(z));
+  for (let x = -len / 2; x < len / 2; x += 0.65) grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 2.3), wood).translateX(x).translateY(0.02));
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, 3.2), mat('#9a948a'));
+  ballast.position.y = 0.0;
+  grp.add(ballast);
+  const stop = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 0.03, 0.35), mat('#f4f1e8'));
+  stop.position.set(0, 0.03, RAIL_STOP);
+  grp.add(stop);
+  const barriers = [];
+  for (const side of [-1, 1]) {
+    const b = makeRailBarrier();
+    b.position.set(side * (hw + 0.4), 0.14, side < 0 ? RAIL_STOP - 0.6 : -RAIL_STOP + 0.6);
+    b.rotation.y = side < 0 ? 0 : Math.PI;
+    grp.add(b);
+    barriers.push(b);
+  }
+  const train = makeTrain();
+  train.visible = false;
+  grp.add(train);
+  grp.userData = { barriers, train };
+  return grp;
+}
+
+function updateRail(R, g, e, obj) {
+  const grp = obj.children[0];
+  const { barriers, train } = grp.userData;
+  obj.position.x = g.world.center(e.y);
+  const down = railBarrierDown(g, e);
+  const k = down ? Math.min(1, (g.t - e.t0) / 1.2) : Math.max(0, 1 - (g.t - (e.t0 + 2.4 + 3.4 + 0.6)) / 1.2);
+  for (const b of barriers) {
+    b.userData.arm.rotation.z = Math.PI / 2 * (1 - (e.state === 'idle' ? 0 : k));
+    const on = e.state === 'warn' && down && Math.floor(R.t * 3) % 2 === 0;
+    b.userData.lampA.color.set(e.state === 'warn' && down ? (on ? '#ff2020' : '#441111') : '#441111');
+    b.userData.lampB.color.set(e.state === 'warn' && down ? (on ? '#441111' : '#ff2020') : '#441111');
+  }
+  const span = trainSpan(g, e);
+  train.visible = Boolean(span);
+  if (span) {
+    train.position.x = span.front - obj.position.x;
+    train.rotation.y = e.dir > 0 ? 0 : Math.PI;
+  }
+}
+
+// ---------- the checkout ----------
+function syncCheckout(R, g) {
+  if (g.checkoutY === null && !g.won) {
+    if (R.checkout) { R.scene.remove(R.checkout); R.checkout = null; }
+    return;
+  }
+  if (!R.checkout) R.checkout = buildCheckout(R, g, g.checkoutY ?? g.cart.y);
+}
+
+function buildCheckout(R, g, y) {
+  const grp = new THREE.Group();
+  const w = g.world;
+  const hw = w.halfWidth(y) + 0.3;
+  const red = mat('#e63946'), white = mat('#ffffff');
+  for (const side of [-1, 1]) {
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.2, 0.4), red).translateX(side * hw).translateY(2.1));
+    // a till with a conveyor belt
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 2.6), white).translateX(side * (hw + 1)).translateY(0.45).translateZ(1.2));
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 2.4), mat('#222222')).translateX(side * (hw + 1)).translateY(0.92).translateZ(1.2));
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), mat('#3d405b')).translateX(side * (hw + 1)).translateY(1.1).translateZ(0.1));
+  }
+  // The sign, with the word drawn on a canvas.
+  const cv = document.createElement('canvas');
+  cv.width = 1024; cv.height = 192;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#e63946'; ctx.fillRect(0, 0, 1024, 192);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '120px "Lilita One", system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(R.label('CHECKOUT'), 512, 104);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 0.4, 1.1, 0.3), [red, red, red, red, new THREE.MeshBasicMaterial({ map: tex }), new THREE.MeshBasicMaterial({ map: tex })]);
+  sign.position.y = 4.4;
+  grp.add(sign);
+  // A checkered finish line.
+  for (let i = 0; i < Math.ceil(hw * 4); i++) for (let j = 0; j < 2; j++) {
+    const sq = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.5), mat((i + j) % 2 ? '#1e1e24' : '#ffffff'));
+    sq.position.set(-hw + 0.25 + i * 0.5, 0.02, -j * 0.5);
+    grp.add(sq);
+  }
+  grp.position.set(w.center(y), w.elevation(y), -y);
+  grp.rotation.x = -Math.atan(SECTION[w.sectionAt(y).kind].drop);
+  R.scene.add(grp);
+  return grp;
 }
 
 function updateDebris(R, g, dt) {
