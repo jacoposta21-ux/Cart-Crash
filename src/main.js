@@ -548,7 +548,7 @@ if (TEST) {
       if (title) {
         const el = document.createElement('div');
         el.className = 'poster-title';
-        el.innerHTML = `<h1 class="logo"><span>Cart</span><span>Crash</span></h1>`;
+        el.innerHTML = '<h1 class="logo"><img src="assets/logo.webp" alt="Cart Crash"></h1>';
         document.body.append(el);
       }
       for (let i = 0; i < 40; i++) frame(1 / 30);

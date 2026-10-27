@@ -7,6 +7,7 @@
   <meta name="description" content="Cart Crash: ride a shopping cart down an endless hilly town. Everything you grab piles up in the cart and changes how you steer.">
   <meta name="theme-color" content="#1d2340">
   <link rel="icon" type="image/png" href="assets/icon-64.png">
+  <link rel="preload" href="assets/logo.webp" as="image">
   <link rel="preload" href="vendor/fonts/lilita-one.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
@@ -17,7 +18,7 @@
   <canvas id="game" aria-label="Cart Crash" data-i18n-label="Cart Crash"></canvas>
   <div id="fx" class="fx-layer" aria-hidden="true"></div>
 
-  <div id="loading" class="loading" aria-hidden="true"><span class="loading-cart"></span></div>
+  <div id="loading" class="loading" aria-hidden="true"><img src="assets/logo.webp" alt="" width="272" height="286"><span class="loading-cart"></span></div>
 
   <div id="touch" class="touch-zones" aria-hidden="true" hidden>
     <div class="tz tz-left"><svg viewBox="0 0 24 24"><path d="M15.5 4 7.5 12l8 8"/></svg></div>
@@ -47,7 +48,7 @@
 
   <section id="screen-menu" class="screen screen-menu" aria-labelledby="title" hidden>
     <div class="menu-card">
-      <h1 id="title" class="logo"><span>Cart</span><span>Crash</span></h1>
+      <h1 id="title" class="logo"><img src="assets/logo.webp" alt="Cart Crash" width="544" height="572"></h1>
       <p class="tagline" data-i18n="Race a shopping cart down the hill: grab what is on your list and reach the checkout first.">Race a shopping cart down the hill: grab what is on your list and reach the checkout first.</p>
       <button id="btn-play" class="btn btn-primary btn-big" type="button" data-i18n="Play">Play</button>
       <p id="menu-records" class="records"></p>

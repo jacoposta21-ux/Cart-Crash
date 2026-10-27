@@ -110,7 +110,12 @@ Niente login, niente pubblicità esterne, niente link verso altri siti. La
 pagina `privacy.html` è dentro lo zip ed è linkata dal menu e dalle
 impostazioni (anche su telefono). Contatto: info@eyeball.cloud.
 
-Materiali in `crazygames/`, generati dal gioco con `npm run media`:
+Logo: `brand/logo-original.webp` (originale) e `brand/logo-transparent.png`
+(ritagliato, sfondo trasparente); nel gioco si usa `assets/logo.webp`, e le
+icone `assets/icon-*.png` sono ricavate dal logo.
+
+Materiali in `crazygames/`, generati dal gioco con `npm run media` (il logo è
+sovrapposto alle copertine):
 
 - copertine `cover-1920x1080.png`, `cover-800x1200.png` (2:3), `cover-800x800.png`;
 - video `preview-1920x1080.mp4` e `preview-1080x1620.mp4` (2:3), 30 s ciascuno.

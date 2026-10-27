@@ -403,19 +403,33 @@ export function makeTrain() {
   return g;
 }
 
-/** The traffic warden: white helmet, blue uniform, a whistle. Animated like a walker. */
+/** The traffic warden, as on the logo: blue uniform, police cap with a badge, dark glasses, a baton. */
 export function makeCop() {
   const look = 4; // no bag, no hat
   const g = makeWalker(look);
   const shirt = mat(SHIRT[look % SHIRT.length]), pants = mat(PANTS[(look >> 2) % PANTS.length]);
+  const hair = mat(HAIR[(look >> 3) % HAIR.length]);
   g.traverse((o) => {
     if (!o.isMesh) return;
-    if (o.material === shirt) o.material = mat('#1d3f8f');
-    else if (o.material === pants) o.material = mat('#16264f');
+    if (o.material === shirt) o.material = mat('#1f4fa8');
+    else if (o.material === pants) o.material = mat('#1a2f66');
+    else if (o.material === hair) o.visible = false;
   });
-  g.add(mesh(cyl(0.2, 0.2, 0.16, 12), mat('#ffffff'), 0, 1.86, 0));
-  g.add(mesh(cyl(0.26, 0.26, 0.03, 12), mat('#ffffff'), 0, 1.79, 0));
-  g.add(mesh(box(0.46, 0.08, 0.27), mat('#ffffff'), 0, 1.2, 0)); // the white belt
+  // cap: crown, band and peak, with a gold badge
+  g.add(mesh(box(0.34, 0.14, 0.34), mat('#1a2f66'), 0, 1.83, 0.01));
+  g.add(mesh(box(0.31, 0.06, 0.31), mat('#0f1c40'), 0, 1.74, 0.01));
+  g.add(mesh(box(0.3, 0.03, 0.14), mat('#0f1c40'), 0, 1.72, -0.2));
+  g.add(mesh(box(0.08, 0.08, 0.02), mat('#ffcf3a'), 0, 1.82, -0.17));
+  // dark glasses
+  g.add(mesh(box(0.3, 0.07, 0.03), mat('#14161c'), 0, 1.62, -0.15));
+  // belt with a buckle, and a badge on the chest
+  g.add(mesh(box(0.46, 0.07, 0.27), mat('#14161c'), 0, 0.82, 0));
+  g.add(mesh(box(0.06, 0.07, 0.02), mat('#ffcf3a'), -0.12, 1.22, -0.14));
+  // the baton, in the raised right hand
+  const { armR } = g.userData;
+  const baton = mesh(cyl(0.035, 0.035, 0.5, 6), mat('#14161c'), 0, -0.62, -0.18);
+  baton.rotation.x = Math.PI / 2;
+  armR.add(baton);
   return g;
 }
 

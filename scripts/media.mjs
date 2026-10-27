@@ -1,13 +1,13 @@
 // Store materials, rendered from the game itself (build dist/ first):
-//   assets/icon-*.png                 favicon and app icons
 //   crazygames/cover-1920x1080.png    landscape cover
 //   crazygames/cover-800x1200.png     portrait cover (2:3)
 //   crazygames/cover-800x800.png      square cover
 //   crazygames/preview-1920x1080.mp4  ~30 s of play, landscape
 //   crazygames/preview-1080x1620.mp4  ~30 s of play, portrait (2:3)
-// Usage: node scripts/media.mjs [covers] [icons] [videos]   (all three by default)
+// Usage: node scripts/media.mjs [covers] [videos]   (both by default)
+// The icons in assets/ come from the logo (brand/logo-transparent.png).
 import { mkdirSync } from 'node:fs';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { startServer } from './serve.mjs';
@@ -39,16 +39,6 @@ if (all || want.includes('covers')) {
     console.log(`cover ${w}x${h}`);
     await page.close();
   }
-}
-
-if (all || want.includes('icons')) {
-  const page = await open({ width: 512, height: 512 }, '');
-  await page.evaluate(() => window.__cc.poster(9, false, true));
-  const out = join(ROOT, 'assets', 'icon-512.png');
-  await page.screenshot({ path: out });
-  await page.close();
-  for (const size of [192, 64]) execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', out, '-vf', `scale=${size}:${size}:flags=lanczos`, join(ROOT, 'assets', `icon-${size}.png`)]);
-  console.log('icons');
 }
 
 if (all || want.includes('videos')) {
