@@ -108,7 +108,9 @@ La build per CrazyGames (`src/portal.js`, SDK v3 caricato solo lì):
 
 Niente login, niente pubblicità esterne, niente link verso altri siti. La
 pagina `privacy.html` è dentro lo zip ed è linkata dal menu e dalle
-impostazioni (anche su telefono). Contatto: info@eyeball.cloud.
+impostazioni (anche su telefono); è in inglese. Contatto: help@trustyourbot.com.
+Lo zip non contiene immagini oltre al logo che il gioco mostra: icone e
+copertine si caricano a parte.
 
 Logo: `brand/logo-original.webp` (originale) e `brand/logo-transparent.png`
 (ritagliato, sfondo trasparente); nel gioco si usa `assets/logo.webp`, e le

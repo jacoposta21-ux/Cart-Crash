@@ -4,7 +4,7 @@
 //   - nothing scrolls, every button is at least 44px, no console errors
 //   - keyboard and touch steering, language switch, storage blocked
 //   - the CrazyGames build against a fake SDK: init, loading, gameplay start/stop, mute, locale
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { startServer } from '../scripts/serve.mjs';
@@ -226,7 +226,7 @@ log('\n▶ privacy page and links');
 {
   const res = await fetch('http://127.0.0.1:8097/privacy.html');
   const html = await res.text();
-  check(res.ok && html.includes('info@eyeball.cloud'), 'privacy.html is served with the contact address');
+  check(res.ok && html.includes('help@trustyourbot.com'), 'privacy.html is served with the contact address');
   for (const dir of ['dist', 'dist-crazygames']) {
     for (const f of ['index.html', 'privacy.html']) {
       const src = readFileSync(join(ROOT, dir, f), 'utf8');
@@ -234,6 +234,8 @@ log('\n▶ privacy page and links');
       check(external.length === 0, `${dir}/${f}: no links to other sites (${external.join(', ')})`);
     }
   }
+  const pictures = readdirSync(join(ROOT, 'dist-crazygames', 'assets'));
+  check(pictures.join() === 'logo.webp', `CrazyGames build: no pictures but the logo (${pictures.join(', ')})`);
 }
 
 log('\n▶ CrazyGames build with a fake SDK (it-IT, muted)');
