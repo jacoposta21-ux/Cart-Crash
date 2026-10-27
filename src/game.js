@@ -45,20 +45,21 @@ const DOG_GIVE_UP = 28;
 
 const LIST_POOL = ['melon', 'oil', 'eggs', ...GOODS];
 
-/** A shopping list: `n` different things, 1–2 of each, about 9 in all. */
-export function makeList(seed, n = 7) {
+/** A shopping list: 4 different things, 2–3 of each (1–2 watermelons), about 9 in all. */
+export function makeList(seed, n = 4) {
   const r = rng(seed ^ 0x51ed27);
   const pool = [...LIST_POOL];
   const list = [];
-  let total = 0;
   while (list.length < n) {
     const key = pool.splice(Math.floor(r() * pool.length), 1)[0];
-    const need = key !== 'melon' && total + 2 + (n - list.length - 1) <= 10 && r() < 0.45 ? 2 : 1;
-    total += need;
+    const need = key === 'melon' ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2);
     list.push({ key, need });
   }
   return list;
 }
+
+/** Seconds added to the time for each thing in the cart that is not on the list (or one too many). */
+export const EXTRA_PENALTY = 5;
 
 export function createGame(seed, opts = {}) {
   const list = opts.list || makeList(seed);
@@ -104,6 +105,8 @@ export function listProgress(g) {
   return g.list.map((l) => ({ ...l, have: Math.min(l.need, have[l.key] || 0) }));
 }
 export const listDone = (g) => listProgress(g).every((l) => l.have >= l.need);
+/** Things in the cart beyond the list: junk, one too many, and balloons. */
+export const extras = (g) => g.stack.filter((it) => !isNeeded(g, it)).length + g.balloons.length;
 export const listCount = (g) => listProgress(g).reduce((a, l) => [a[0] + l.have, a[1] + l.need], [0, 0]);
 /** Is one more of this wanted right now? */
 export function wanted(g, key) {
@@ -233,7 +236,8 @@ function win(g) {
   g.won = true;
   g.overT = 0;
   g.finishTime = g.t;
-  emit(g, 'checkout', { time: g.t });
+  g.extrasAtCheckout = extras(g);
+  emit(g, 'checkout', { time: g.t, extras: g.extrasAtCheckout });
 }
 
 /** Drops the thing on top of the pile behind the cart (to make room, or for a dog). */
@@ -577,10 +581,16 @@ export function drainEvents(g) {
 /** The ride's outcome, for the end screen and the records. */
 export function result(g) {
   const [have, need] = g.won || !g.endCount ? listCount(g) : g.endCount;
+  const extra = g.won ? g.extrasAtCheckout : extras(g);
+  const time = g.won ? g.finishTime : g.t;
   return {
     won: g.won,
     reason: g.reason,
-    time: g.won ? g.finishTime : g.t,
+    time,
+    extras: extra,
+    penalty: extra * EXTRA_PENALTY,
+    /** The score: time plus the penalty for extras (lower is better; only for a finished list). */
+    total: time + extra * EXTRA_PENALTY,
     distance: Math.floor(g.distance),
     have,
     need,

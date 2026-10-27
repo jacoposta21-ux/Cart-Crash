@@ -1,17 +1,16 @@
 // A simple driver for the menu's background ride, the trailer and the tests:
-// heads for what is still on the list (and skips the rest when the cart is
-// filling up), swerves round obstacles and people, jumps the low ones, stops
+// heads for what is still on the list and steers clear of the rest (extras cost
+// time at the checkout, so it drops any that land on top), swerves round obstacles and people, jumps the low ones, stops
 // at red lights and level crossings, and throws a treat to a dog that is
 // about to catch up.
 import { OBSTACLES, JUMPABLE, LIGHT_STOP, RAIL_STOP } from './world.js';
-import { wanted, isNeeded, stackHeight, MAX_PILE, lightPhase } from './game.js';
+import { wanted, isNeeded, lightPhase } from './game.js';
 
 export function botSteer(g, skill = 1) {
   const c = g.cart;
   const w = g.world;
   const ents = w.entities;
   const out = { steer: 0, brake: false, jump: false, drop: false };
-  const roomy = stackHeight(g) < MAX_PILE - 1.2;
   let targetX = w.center(c.y + 4);
   let best = -Infinity;
   for (let i = g.next; i < ents.length && ents[i].y < c.y + 12; i++) {
@@ -20,7 +19,7 @@ export function botSteer(g, skill = 1) {
     if (dy < 0.6 || e.taken || e.kind !== 'item') continue;
     const key = e.type === 'goods' ? e.goods : e.type;
     const want = wanted(g, key);
-    if (!want && !(roomy && e.type === 'balloon')) continue;
+    if (!want) continue;
     const reach = Math.abs(e.x - c.x) / Math.max(dy, 0.5);
     if (reach > 1.4) continue;
     const score = 3 - dy * 0.12 - reach;
@@ -28,8 +27,8 @@ export function botSteer(g, skill = 1) {
   }
   for (let i = g.next; i < ents.length && ents[i].y < c.y + 8; i++) {
     const e = ents[i];
-    if (e.kind === 'item' && e.y > c.y + 0.5 && !wanted(g, e.type === 'goods' ? e.goods : e.type) && e.type !== 'balloon' && !roomy && Math.abs(targetX - e.x) < 0.9) {
-      targetX = e.x + (targetX >= e.x ? 1 : -1) * 1.1; // keep junk out of a full cart
+    if (e.kind === 'item' && e.y > c.y + 0.5 && (e.type === 'balloon' || !wanted(g, e.type === 'goods' ? e.goods : e.type)) && Math.abs(targetX - e.x) < 0.9) {
+      targetX = e.x + (targetX >= e.x ? 1 : -1) * 1.1; // keep extras out of the cart
       continue;
     }
     if (e.kind !== 'obstacle' || e.knocked || e.gone || e.y < c.y - 0.3) continue;
@@ -77,6 +76,9 @@ export function botSteer(g, skill = 1) {
       if (!isNeeded(g, top) || c.v < 6) out.drop = true;
     }
   }
+  // An extra on top of the pile: throw it away.
+  const top = g.stack[g.stack.length - 1];
+  if (top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;
   const err = targetX - c.x - c.vx * 0.12;
   const dead = 0.12 + (1 - skill) * 0.4;
   out.steer = Math.abs(err) < dead ? 0 : Math.max(-1, Math.min(1, err * 1.6));

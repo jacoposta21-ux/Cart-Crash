@@ -89,7 +89,14 @@ test('the things on the list turn up often', () => {
   w.ensure(3000);
   const items = w.entities.filter((e) => e.kind === 'item');
   const bread = items.filter((e) => e.goods === 'bread').length;
-  assert.ok(bread / items.length > 0.3, `${bread} of ${items.length}`);
+  assert.ok(bread / items.length > 0.5, `${bread} of ${items.length}`);
+});
+
+test('not too many things on the road', () => {
+  const w = createWorld(5, { wanted: ['bread', 'can'] });
+  w.ensure(3000);
+  const perHundred = w.entities.filter((e) => e.kind === 'item').length / 30;
+  assert.ok(perHundred > 5 && perHundred < 10, perHundred.toFixed(1));
 });
 
 test('pruning forgets what is behind', () => {

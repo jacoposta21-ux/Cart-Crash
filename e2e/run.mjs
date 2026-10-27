@@ -128,7 +128,7 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   await frames(page, 10);
   const hud = await page.evaluate(() => ({ time: document.querySelector('#hud-time').textContent, list: document.querySelectorAll('#hud-list li').length, goal: document.querySelector('#hud-goal').textContent, lives: document.querySelectorAll('#hud-lives .life').length }));
   check(/^\d:\d\d\.\d$/.test(hud.time) && hud.time !== '0:00.0', `${name}: the clock runs (${hud.time})`);
-  check(hud.list === 7, `${name}: the shopping list shows 7 things`);
+  check(hud.list === 4, `${name}: the shopping list shows 4 things`);
   check(/\d+\/\d+|\d+ m/.test(hud.goal), `${name}: list progress shown (${hud.goal})`);
   check(hud.lives === 3, `${name}: three lives shown`);
   await audit(page, `${name} ride`);
@@ -148,30 +148,33 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   check(await page.evaluate(() => window.__cc.mode) === 'end', `${name}: the third crash ends the ride`);
   await page.waitForTimeout(1000);
   check(await visible(page, '#screen-end'), `${name}: end screen visible`);
-  const end = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, dist: document.querySelector('#end-dist').textContent }));
+  const end = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, dist: document.querySelector('#end-a').textContent }));
   check(/^\d+\/\d+$/.test(end.score), `${name}: knocked out: list progress shown (${end.score})`);
-  check(/\d+ m/.test(end.dist), `${name}: distance on the end screen`);
+  check(/\d+ m/.test(end.dist), `${name}: distance on the end screen when knocked out`);
   await audit(page, `${name} end`);
   await page.screenshot({ path: join(SHOTS, `${name}-end.png`) });
   await page.click('#btn-again');
   check(await page.evaluate(() => window.__cc.mode) === 'play', `${name}: Play again starts a new ride`);
   // Fill the list: the checkout appears, reaching it gives a time and a record.
-  await page.evaluate(() => { window.__cc.fillList(); window.__cc.run(0.2, { steer: 0 }); });
+  await page.evaluate(() => { window.__cc.fillList(); window.__cc.game.stack.push({ type: 'goods', goods: 'cereal', h: 0.3, id: 8888 }); window.__cc.run(0.2, { steer: 0 }); });
+  await frames(page, 2);
+  check(/\+5s/.test(await page.textContent('#hud-chips')), `${name}: an extra shows its +5 s`);
   await frames(page, 4);
   check(/m$/.test(await page.textContent('#hud-goal')), `${name}: the checkout distance shows when the list is done`);
   await page.evaluate(() => window.__cc.run(12, { steer: 0 }));
   await frames(page, 80);
   check(await page.evaluate(() => window.__cc.mode) === 'end', `${name}: reaching the checkout ends the race`);
   await page.waitForTimeout(300);
-  const won = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, best: localStorage.getItem('cartcrash:bestTime') }));
-  check(/^\d:\d\d\.\d$/.test(won.score) && Number(won.best) > 0, `${name}: winning time shown and saved (${won.score}, ${won.best})`);
+  const won = await page.evaluate(() => ({ score: document.querySelector('#end-score').textContent, time: document.querySelector('#end-a').textContent, extras: document.querySelector('#end-b').textContent, best: Number(localStorage.getItem('cartcrash:bestScore')), raw: window.__cc.game.finishTime }));
+  check(/^\d:\d\d\.\d$/.test(won.score) && won.best > 0, `${name}: score shown and saved (${won.score}, ${won.best})`);
+  check(won.extras.includes('+5s') && Math.abs(won.best - won.raw - 5) < 0.01, `${name}: one extra adds 5 s to the time (${won.time} → ${won.score})`);
   await page.screenshot({ path: join(SHOTS, `${name}-win.png`) });
   await audit(page, `${name} win`);
   await page.click('#btn-again');
   await page.evaluate(() => window.__cc.pause());
   await page.click('#btn-quit');
   check(await page.evaluate(() => window.__cc.mode) === 'menu', `${name}: back to the menu`);
-  check((await page.textContent('#menu-records')).includes('Best time'), `${name}: the best time is on the menu`);
+  check((await page.textContent('#menu-records')).includes('Best score'), `${name}: the best score is on the menu`);
 
   // Settings and languages.
   await page.click('#btn-settings');

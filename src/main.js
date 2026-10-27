@@ -1,6 +1,6 @@
 // Cart Crash: screens, input, the game loop, records and the CrazyGames hooks.
 import { BUILD } from './build.js';
-import { createGame, step, drainEvents, result, count, handling, listProgress, LIVES } from './game.js';
+import { createGame, step, drainEvents, result, count, handling, listProgress, extras, LIVES, EXTRA_PENALTY } from './game.js';
 import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon } from './render3d.js';
 import { botSteer } from './bot.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
@@ -14,7 +14,7 @@ const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
 const DT = 1 / 120;
 
-const BEST_KEY = 'cartcrash:bestTime';
+const BEST_KEY = 'cartcrash:bestScore'; // time + extras penalty, in seconds (lower is better)
 const SHAKE_KEY = 'cartcrash:shake';
 const RIDES_KEY = 'cartcrash:rides';
 
@@ -89,7 +89,7 @@ canvas.addEventListener('pointermove', (e) => {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   const dy = e.clientY - p.y0;
-  if (!p.jumped && !p.brake && dy < -SWIPE && performance.now() - p.t0 < 450) { p.jumped = true; pressed.jump = true; }
+  if (!p.jumped && !p.brake && dy < -SWIPE && performance.now() - p.t0 < 600) { p.jumped = true; pressed.jump = true; }
   if (!p.brake && dy > SWIPE) p.brake = true;
   if (!p.brake) p.side = sideOf(e.clientX);
 });
@@ -121,7 +121,7 @@ function icon(src, size) {
 
 function renderMenu() {
   const best = load(BEST_KEY, null);
-  $('menu-records').innerHTML = best ? t('Best time: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list, reach the checkout, beat the clock.');
+  $('menu-records').innerHTML = best ? t('Best score: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list, reach the checkout, beat the clock.');
   $('legend').replaceChildren(...LEGEND.map((type) => {
     const li = document.createElement('li');
     const b = document.createElement('b'); b.textContent = t(ITEM_NAME[type]);
@@ -129,7 +129,7 @@ function renderMenu() {
     li.append(icon(itemIcon(type), 40), b, sp);
     return li;
   }));
-  $('rules').textContent = t('Only what is on the list counts, and the cart fills up fast. Stop at red lights and level crossings. Three crashes and you are out.');
+  $('rules').textContent = t('Fill the list to reach the checkout. Every extra thing in the cart adds 5 seconds. Stop at red lights and level crossings. Three crashes and you are out.');
   $('controls-help').innerHTML = touchMode
     ? t('Hold left or right to steer. Swipe up to jump, swipe down and hold to brake.')
     : t('{steer} steer · {brake} brake · {jump} jump · {drop} drop the top thing', {
@@ -194,8 +194,8 @@ function finish() {
   audio.rolling(0, false);
   const r = result(game);
   const best = load(BEST_KEY, null);
-  const isRecord = r.won && (best === null || r.time < best);
-  if (isRecord) save(BEST_KEY, r.time);
+  const isRecord = r.won && (best === null || r.total < best);
+  if (isRecord) save(BEST_KEY, r.total);
   renderEnd(r, isRecord, best);
   show('screen-end');
   if (isRecord) { audio.record(); portal.happytime(); }
@@ -207,13 +207,22 @@ function renderEnd(r, isRecord, prevBest) {
     : r.reason === 'train' ? t('Hit by the train!') : t('Three crashes: you are out!');
   $('end-title').textContent = title;
   $('end-record').hidden = !(isRecord && prevBest !== null);
-  $('end-score').textContent = r.won ? formatTime(r.time) : `${r.have}/${r.need}`;
-  $('end-score-label').textContent = r.won ? t('your time') : t('on the list');
-  $('end-dist').textContent = `${Math.floor(r.distance)} m`;
+  $('end-score').textContent = r.won ? formatTime(r.total) : `${r.have}/${r.need}`;
+  $('end-score-label').textContent = r.won ? t('time + extras') : t('on the list');
+  if (r.won) {
+    $('end-a-label').textContent = t('Time');
+    $('end-a').textContent = formatTime(r.time);
+    $('end-b-label').textContent = t('Extras');
+    $('end-b').textContent = r.extras ? `${r.extras} · +${r.penalty}s` : '0';
+  } else {
+    $('end-a-label').textContent = t('Distance');
+    $('end-a').textContent = `${Math.floor(r.distance)} m`;
+    $('end-b-label').textContent = t('Time');
+    $('end-b').textContent = formatTime(r.time);
+  }
   $('end-crashes').textContent = String(r.crashes);
-  $('end-lost').textContent = String(r.lost);
   const best = load(BEST_KEY, null);
-  $('end-best').innerHTML = best ? t('Best time: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list and reach the checkout to set a time.');
+  $('end-best').innerHTML = best ? t('Best score: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list and reach the checkout to set a time.');
 }
 
 // ---------- HUD ----------
@@ -297,11 +306,13 @@ function updateHud(force) {
   const oil = g.cart.oil > 0 ? Math.ceil(g.cart.oil) : 0;
   const wobbly = g.wobble > 0.65 && g.stack.length > 2;
   const dog = g.dogs.some((d) => d.state === 'chase' && g.cart.y - d.y < 8);
-  const key = `${melons}|${balloons}|${oil}|${wobbly}|${dog}|${getLang()}`;
+  const nExtra = extras(g);
+  const key = `${melons}|${balloons}|${oil}|${wobbly}|${dog}|${nExtra}|${getLang()}`;
   if (key === chipsKey && !force) return;
   chipsKey = key;
   const chips = [];
   if (dog) { const c = document.createElement('span'); c.className = 'chip warn'; c.textContent = t('Dog behind! Drop something!'); chips.push(c); }
+  if (nExtra) { const c = document.createElement('span'); c.className = 'chip extra'; c.textContent = t('Extras: {n} (+{s}s)', { n: nExtra, s: nExtra * EXTRA_PENALTY }); chips.push(c); }
   if (melons) chips.push(chip('melon', `${t('Heavy')} ×${melons}`));
   if (balloons) chips.push(chip('balloon', `${t('Floaty')} ×${balloons}`));
   if (oil) chips.push(chip('oil', `${t('Slippery')} ${oil}s`, true));
@@ -329,7 +340,7 @@ function handleEvents(g, events, live) {
     if (e.type === 'pickup' && !shownTips.has(e.item) && TIPS[e.item]) {
       if (e.item !== 'goods' || g.stack.length > 3) { shownTips.add(e.item); showHint(t(TIPS[e.item])); }
     }
-    if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list! It only takes up room. Tap Drop to throw the top thing away.') : t('Not on the list! It only takes up room. Press E to drop the top thing.'), 3800); }
+    if (e.type === 'pickup' && !e.wanted && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list: +5 seconds at the checkout! Tap Drop to throw the top thing away.') : t('Not on the list: +5 seconds at the checkout! Press E to drop the top thing.'), 3800); }
     if (e.type === 'tall') toast(t('What a pile!'));
     if (e.type === 'ramp') toast(t('Wheee!'));
     if (e.type === 'dog') toast(t('Woof!'));

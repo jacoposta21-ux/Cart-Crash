@@ -306,3 +306,5 @@ html, body {
   .drop-btn { left: auto; right: 16px; bottom: calc(108px + var(--safe-b)); transform: none; }
   .drop-btn:active { transform: translateY(2px); }
 }
+
+.chip.extra { background: #ffd5d5; color: #8b1e2d; padding-left: 10px; }

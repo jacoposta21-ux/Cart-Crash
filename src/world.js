@@ -144,10 +144,10 @@ export function createWorld(seed, { wanted = [] } = {}) {
     : kind === 'stairs'
       ? { goods: 54, balloon: 12, eggs: 10, oil: 8, melon: 14 }
       : { goods: 46, melon: 14, balloon: 8, oil: 14, eggs: 14 });
-  /** Often something from the list (the shop has what you need, if you can grab it). */
+  /** Often something from the list (the shop has what you need, if you can grab it): about two times in three. */
   function itemSpec(kind, forced) {
     let key = forced;
-    if (!key) key = world.wanted.length && r() < 0.36 ? world.wanted[Math.floor(r() * world.wanted.length)] : pick(itemWeights(kind));
+    if (!key) key = world.wanted.length && r() < 0.68 ? world.wanted[Math.floor(r() * world.wanted.length)] : pick(itemWeights(kind));
     if (key === 'goods') key = GOODS[Math.floor(r() * GOODS.length)];
     if (GOODS.includes(key)) return { type: 'goods', goods: key };
     return key === 'balloon' ? { type: 'balloon', color: Math.floor(r() * 5) } : { type: key };
@@ -199,17 +199,17 @@ export function createWorld(seed, { wanted = [] } = {}) {
 
     let y = Math.max(s.start + 2, 22);
     while (y < s.end - 2) {
-      // Difficulty 0 → 1 over the first 1.5 km.
-      const d = Math.min(1, y / 1500);
+      // Difficulty 0 → 1 over the first 2.5 km.
+      const d = Math.min(1, y / 2500);
       const lim = halfWidth(y) - 0.7;
       const u = () => range(-lim, lim);
       const early = y < 60;
       let pattern;
-      if (s.kind === 'stairs') pattern = pick({ single: 3, row: 3, trail: 2, balloons: 0.5, pigeons: 1, crosser: 1.5 + d });
-      else if (s.kind === 'market') pattern = pick({ single: 3, row: 3, trail: 2, obstacle: 2.5 + 2 * d, gate: 2.5, jump: 1.5, crosser: 2.5 + 2 * d, crowd: 1 + 1.5 * d, along: 1.5 + d, pigeons: 1 });
-      else if (early) pattern = pick({ single: 3, row: 2, trail: 2, obstacle: 1, crosser: 1, pigeons: 1 });
+      if (s.kind === 'stairs') pattern = pick({ single: 2, row: 1, trail: 1, balloons: 0.3, pigeons: 1, crosser: 1.5 + d, none: 1.5 });
+      else if (s.kind === 'market') pattern = pick({ single: 2.5, row: 1.2, trail: 1, obstacle: 2.5 + 2 * d, gate: 2.5, jump: 1.5, crosser: 2.5 + 2 * d, crowd: 1 + 1.5 * d, along: 1.5 + d, pigeons: 1 });
+      else if (early) pattern = pick({ single: 3, row: 1, trail: 1, obstacle: 1, crosser: 1, pigeons: 1 });
       else pattern = pick({
-        single: 3, row: 2, trail: 2, obstacle: 2 + 2 * d, gate: 2 + d, potholes: 1.2 + d, puddle: 1, jump: 2 + d,
+        single: 2.5, row: 1, trail: 0.8, obstacle: 2 + 2 * d, gate: 2 + d, potholes: 1.2 + d, puddle: 1, jump: 2 + d,
         roadworks: s.kind === 'street' ? 1 + d : 0, ramp: s.kind === 'street' ? 0.8 : 0,
         crosser: 2.5 + 3 * d, crowd: 0.8 + 2 * d, along: 1.2 + 1.5 * d, pigeons: 1, dog: 0.45 + 0.3 * d,
       });
@@ -217,14 +217,14 @@ export function createWorld(seed, { wanted = [] } = {}) {
       switch (pattern) {
         case 'single': addItem(y, u()); break;
         case 'row': {
-          const n = r() < 0.5 ? 2 : 3, w = Math.min(lim, 2.2), mid = range(-lim + w, lim - w) || 0;
+          const n = r() < 0.75 ? 2 : 3, w = Math.min(lim, 2.2), mid = range(-lim + w, lim - w) || 0;
           for (let i = 0; i < n; i++) addItem(y + i * 0.4, mid - w + (i * 2 * w) / (n - 1));
           break;
         }
         case 'trail': {
           let off = u();
           const drift = range(-0.9, 0.9);
-          for (let i = 0; i < 3; i++) { addItem(y + i * 1.8, off); off += drift; }
+          for (let i = 0; i < 3; i++) { if (i !== 1 || r() < 0.5) addItem(y + i * 1.8, off); off += drift; }
           y += 4;
           break;
         }
@@ -237,7 +237,7 @@ export function createWorld(seed, { wanted = [] } = {}) {
         case 'obstacle': {
           const off = u();
           add('obstacle', obstacleFor(s.kind), y, off);
-          addItem(y + range(-0.5, 0.5), off > 0 ? off - range(1.6, 2.6) : off + range(1.6, 2.6));
+          if (r() < 0.4) addItem(y + range(-0.5, 0.5), off > 0 ? off - range(1.6, 2.6) : off + range(1.6, 2.6));
           break;
         }
         case 'gate': {
@@ -255,7 +255,7 @@ export function createWorld(seed, { wanted = [] } = {}) {
           // Something low and wide: jump it, or find the way round.
           const type = pick(s.kind === 'market' ? { boxes: 2, bench: 1, barrier: 1 } : { barrier: 2, bench: 1, boxes: 1, pipe: 1 });
           add('obstacle', type, y, u());
-          addItem(y + 3, u());
+          if (r() < 0.35) addItem(y + 3, u());
           break;
         }
         case 'roadworks': {
@@ -264,7 +264,6 @@ export function createWorld(seed, { wanted = [] } = {}) {
           add('obstacle', 'pipe', y, side * (lim - 1.5) * 0.6);
           add('obstacle', 'barrier', y - 1.6, side * (lim - 1.0));
           add('obstacle', 'cone', y - 1.6, -side * 0.4);
-          addItem(y + 2.5, u());
           y += 3;
           break;
         }
@@ -274,11 +273,11 @@ export function createWorld(seed, { wanted = [] } = {}) {
           y += n * 1.5;
           break;
         }
-        case 'puddle': add('obstacle', 'puddle', y, u()); addItem(y + 3, u()); break;
+        case 'puddle': add('obstacle', 'puddle', y, u()); if (r() < 0.4) addItem(y + 3, u()); break;
         case 'ramp': {
           const off = range(-lim * 0.6, lim * 0.6);
           add('obstacle', 'ramp', y, off);
-          for (let i = 1; i <= 3; i++) addItem(y + 2.6 * i, off);
+          addItem(y + 5.2, off);
           y += 7;
           break;
         }
@@ -298,12 +297,11 @@ export function createWorld(seed, { wanted = [] } = {}) {
         case 'pigeons': {
           const off = u();
           local.push({ id: world.nextId++, kind: 'pigeons', x: center(y) + off, y, n: 3 + Math.floor(r() * 4) });
-          addItem(y + 2.5, u());
+          if (r() < 0.4) addItem(y + 2.5, u());
           break;
         }
         case 'dog': {
           local.push({ id: world.nextId++, kind: 'dog', x: center(y) + (r() < 0.5 ? -1 : 1) * (halfWidth(y) + 0.6), y, look: Math.floor(r() * 4) });
-          addItem(y, u());
           break;
         }
         default: break;

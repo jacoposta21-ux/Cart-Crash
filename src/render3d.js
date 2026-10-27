@@ -116,7 +116,7 @@ export function onEvents(R, g, events, label) {
     const c = g.cart;
     switch (e.type) {
       case 'pickup':
-        text(R, g, c.x, c.y, 2.6, e.wanted ? '✓' : '', label('pickup', e), e.wanted ? 'good' : 'meh');
+        text(R, g, c.x, c.y, 2.6, e.wanted ? '✓' : '+5s', label('pickup', e), e.wanted ? 'good' : 'bad');
         burst(R, g, e.x, e.y, 0.6, e.wanted ? 14 : 6, e.wanted ? ['#3ddc84', '#ffffff', '#ffd23f'] : ['#ffffff', '#cccccc'], 3);
         if (e.wanted) R.cart.cheer = 1;
         break;

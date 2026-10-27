@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createGame, step, drainEvents, handling, jolt, result, makeList, listProgress, listDone, isNeeded,
-  LIVES, RIM, MAX_PILE, stackHeight, itemKey,
+  createGame, step, drainEvents, handling, jolt, result, makeList, listProgress, listDone, isNeeded, extras,
+  LIVES, RIM, MAX_PILE, EXTRA_PENALTY, stackHeight, itemKey,
 } from '../src/game.js';
 import { botSteer } from '../src/bot.js';
 
@@ -31,13 +31,12 @@ test('a ride is deterministic for a seed and the same inputs', () => {
   assert.deepEqual(listProgress(a), listProgress(b));
 });
 
-test('a shopping list has 7 different things, about 9 in all', () => {
+test('a shopping list has 4 different things, several of each', () => {
   for (let seed = 1; seed < 50; seed++) {
     const list = makeList(seed);
-    assert.equal(list.length, 7);
-    assert.equal(new Set(list.map((l) => l.key)).size, 7);
-    const total = list.reduce((a, l) => a + l.need, 0);
-    assert.ok(total >= 7 && total <= 10, String(total));
+    assert.equal(list.length, 4);
+    assert.equal(new Set(list.map((l) => l.key)).size, 4);
+    for (const l of list) assert.ok(l.key === 'melon' ? l.need >= 1 && l.need <= 2 : l.need >= 2 && l.need <= 3, JSON.stringify(l));
   }
 });
 
@@ -84,6 +83,42 @@ test('with the list complete the checkout appears ahead, and reaching it wins', 
   const r = result(g);
   assert.ok(r.won && r.time > 1 && r.time < 16, JSON.stringify(r));
   assert.equal(r.have, 1);
+});
+
+test('every extra thing in the cart at the checkout adds 5 seconds', () => {
+  const g = emptyGame(1, [{ key: 'bread', need: 2 }]);
+  add(g, { type: 'goods', goods: 'bread' });
+  add(g, { type: 'goods', goods: 'cheese' }); // not on the list
+  add(g, { type: 'goods', goods: 'bread' });
+  add(g, { type: 'goods', goods: 'bread' }); // one too many
+  g.balloons.push({ color: 0 }); // balloons are extras too
+  assert.equal(extras(g), 3);
+  run(g, 15);
+  assert.equal(g.won, true);
+  const r = result(g);
+  assert.equal(EXTRA_PENALTY, 5);
+  assert.equal(r.extras, 3);
+  assert.equal(r.penalty, 15);
+  assert.ok(Math.abs(r.total - (r.time + 15)) < 1e-9);
+});
+
+test('dropping an extra before the checkout saves its 5 seconds', () => {
+  const g = emptyGame(1, [{ key: 'bread', need: 1 }]);
+  add(g, { type: 'goods', goods: 'bread' });
+  add(g, { type: 'goods', goods: 'cheese' });
+  assert.equal(extras(g), 1);
+  run(g, DT, { drop: true });
+  assert.equal(extras(g), 0);
+  run(g, 15);
+  assert.equal(result(g).total, result(g).time);
+});
+
+test('without the whole list there is no checkout and no win', () => {
+  const g = emptyGame(1, [{ key: 'bread', need: 2 }]);
+  add(g, { type: 'goods', goods: 'bread' });
+  run(g, 20);
+  assert.equal(g.checkoutY, null);
+  assert.equal(g.won, false);
 });
 
 test('losing a listed thing before the checkout takes the checkout away again', () => {
