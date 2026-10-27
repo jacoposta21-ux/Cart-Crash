@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Cart Crash</title>
+  <meta name="description" content="Cart Crash: ride a shopping cart down a hilly town. Everything you grab piles up in the cart and changes how you steer.">
+  <meta name="theme-color" content="#1d2340">
+  <link rel="icon" type="image/png" href="assets/icon-64.png">
+  <link rel="preload" href="vendor/fonts/lilita-one.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="src/main.js">
+</head>
+<body>
+  <canvas id="game" aria-label="Cart Crash" data-i18n-label="Cart Crash"></canvas>
+
+  <div id="touch" class="touch-zones" aria-hidden="true" hidden>
+    <div class="tz tz-left"><svg viewBox="0 0 24 24"><path d="M15.5 4 7.5 12l8 8"/></svg></div>
+    <div class="tz tz-right"><svg viewBox="0 0 24 24"><path d="M8.5 4l8 8-8 8"/></svg></div>
+  </div>
+
+  <header id="hud" class="hud" hidden>
+    <div class="hud-score">
+      <span class="hud-label" data-i18n="In the cart">In the cart</span>
+      <b id="hud-value">0</b>
+    </div>
+    <div class="hud-progress" aria-hidden="true">
+      <div class="track"><i id="hud-bar"></i><span id="hud-marker" class="marker"></span></div>
+      <span class="flag"></span>
+    </div>
+    <button id="btn-pause" class="icon-btn" type="button" aria-label="Pause" data-i18n-label="Pause">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
+    </button>
+    <div id="hud-chips" class="chips" aria-live="polite"></div>
+  </header>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="hint" class="hint" hidden></div>
+
+  <section id="screen-menu" class="screen screen-menu" aria-labelledby="title">
+    <div class="menu-card">
+      <h1 id="title" class="logo"><span>Cart</span><span>Crash</span></h1>
+      <p class="tagline" data-i18n="Ride a shopping cart downhill. Everything you grab changes how you steer.">Ride a shopping cart downhill. Everything you grab changes how you steer.</p>
+      <div class="menu-actions">
+        <button id="btn-play" class="btn btn-primary btn-big" type="button" data-i18n="Play">Play</button>
+        <button id="btn-daily" class="btn btn-secondary" type="button">
+          <span data-i18n="Daily ride">Daily ride</span>
+          <small data-i18n="Same course for everyone today">Same course for everyone today</small>
+        </button>
+      </div>
+      <p id="menu-records" class="records"></p>
+      <ul id="legend" class="legend"></ul>
+      <p id="controls-help" class="controls-help"></p>
+      <div class="menu-foot">
+        <button id="btn-settings" class="icon-btn" type="button" aria-label="Settings" data-i18n-label="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
+        </button>
+        <button class="icon-btn" type="button" data-sound-toggle aria-label="Mute"></button>
+        <a class="foot-link" href="privacy.html" data-i18n="Privacy">Privacy</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-pause" class="screen" aria-labelledby="pause-title" hidden>
+    <div class="card">
+      <h2 id="pause-title" data-i18n="Paused">Paused</h2>
+      <button id="btn-resume" class="btn btn-primary" type="button" data-i18n="Resume">Resume</button>
+      <button id="btn-restart" class="btn btn-secondary" type="button" data-i18n="Restart">Restart</button>
+      <div class="row">
+        <button id="btn-pause-settings" class="btn btn-ghost" type="button" data-i18n="Settings">Settings</button>
+        <button id="btn-quit" class="btn btn-ghost" type="button" data-i18n="Menu">Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-end" class="screen" aria-labelledby="end-title" hidden>
+    <div class="card card-end">
+      <p id="end-kicker" class="kicker"></p>
+      <h2 id="end-title"></h2>
+      <p class="score-wrap"><b id="end-score" class="score">0</b><span data-i18n="delivered to the bottom">delivered to the bottom</span></p>
+      <p id="end-record" class="badge" hidden data-i18n="New record!">New record!</p>
+      <ul id="end-items" class="end-items"></ul>
+      <p id="end-lost" class="end-lost"></p>
+      <p id="end-best" class="records"></p>
+      <div class="row">
+        <button id="btn-again" class="btn btn-primary btn-big" type="button" data-i18n="Play again">Play again</button>
+        <button id="btn-menu" class="btn btn-ghost" type="button" data-i18n="Menu">Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="screen-settings" class="screen" aria-labelledby="settings-title" hidden>
+    <div class="card">
+      <h2 id="settings-title" data-i18n="Settings">Settings</h2>
+      <label class="field">
+        <span data-i18n="Language">Language</span>
+        <select id="set-lang"></select>
+      </label>
+      <button id="set-sound" class="toggle" type="button" aria-pressed="true"><span data-i18n="Sound effects">Sound effects</span><i></i></button>
+      <button id="set-music" class="toggle" type="button" aria-pressed="true"><span data-i18n="Music">Music</span><i></i></button>
+      <button id="set-shake" class="toggle" type="button" aria-pressed="true"><span data-i18n="Screen shake">Screen shake</span><i></i></button>
+      <p class="settings-foot"><a class="foot-link" href="privacy.html" data-i18n="Privacy">Privacy</a> <span data-i18n="Records are saved on this device only.">Records are saved on this device only.</span></p>
+      <button id="btn-settings-done" class="btn btn-primary" type="button" data-i18n="Done">Done</button>
+    </div>
+  </section>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
