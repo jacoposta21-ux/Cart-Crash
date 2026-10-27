@@ -118,4 +118,12 @@ Materiali in `crazygames/`, generati dal gioco con `npm run media` (il logo è
 sovrapposto alle copertine):
 
 - copertine `cover-1920x1080.png`, `cover-800x1200.png` (2:3), `cover-800x800.png`;
-- video `preview-1920x1080.mp4` e `preview-1080x1620.mp4` (2:3), 30 s ciascuno.
+- video `preview-1920x1080.mp4` e `preview-1080x1620.mp4` (2:3), circa 30 s:
+  il menu col logo e poi i momenti migliori della partita;
+- le singole clip in `crazygames/highlights/` (folla al semaforo rosso, vigile
+  all'inseguimento, salto e schianto, cane distratto con un oggetto, treno al
+  passaggio a livello, arrivo alla cassa), in entrambi i formati.
+
+Le clip sono registrate dal gioco vero (`scripts/highlights.mjs`): per ciascuna
+c'è un seme e un modo di guidare (`POLICIES` in `src/bot.js`) che arrivano al
+momento giusto.

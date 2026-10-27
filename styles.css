@@ -316,3 +316,6 @@ html, body {
   .release-btn:active { transform: translateY(2px); }
 }
 .chip.cop { background: #1d3f8f; color: #fff; animation: none; }
+
+/* trailer recording: no tips over the action */
+.clean .hint { display: none !important; }

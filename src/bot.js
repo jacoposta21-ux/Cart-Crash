@@ -86,3 +86,17 @@ export function botSteer(g, skill = 1) {
   out.steer = Math.abs(err) < dead ? 0 : Math.max(-1, Math.min(1, err * 1.6));
   return out;
 }
+
+/**
+ * Ways to drive for the trailer: 'bot' plays well; 'runred' plays well except
+ * that it rides straight through red lights (to show the crowd and the warden).
+ */
+export const POLICIES = {
+  bot: (g) => botSteer(g),
+  runred: (g) => {
+    const out = botSteer(g);
+    const light = g.world.entities.find((e) => e.kind === 'light' && e.state === 'cycle' && !e.passed && e.y > g.cart.y);
+    if (light) { out.brake = false; out.steer = 0; }
+    return out;
+  },
+};

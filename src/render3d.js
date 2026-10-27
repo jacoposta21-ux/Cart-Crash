@@ -207,7 +207,7 @@ export function render(R, g, dt) {
   const H = Math.min(6, stackHeight(g));
   const portrait = R.W / R.H < 0.8;
   // After the last crash the camera rises and pulls back to show the mess.
-  const out = g.over ? Math.min(1, g.overT / 1.2) : 0;
+  const out = g.over && !g.won ? Math.min(1, g.overT / 1.2) : 0;
   // Close behind the rider: the camera sits just above his cap and climbs with the pile.
   // A tall pile would hide the road, so the camera climbs above it and looks down more.
   // With a dog or the warden on your heels the view widens and pulls back to show them.
@@ -405,6 +405,7 @@ function syncCart(R, g, dt) {
   // Smooth the ground height so stairs feel like bumps, not teleports.
   const ground = w.elevation(c.y);
   R.cartElev += (ground - R.cartElev) * Math.min(1, dt * 22);
+  if (Math.abs(ground - R.cartElev) > 2) R.cartElev = ground; // a jump in time, not a stair
   if (dt === 0) R.cartElev = ground;
   root.position.set(c.x, R.cartElev, -c.y);
   // Point down the road, lean into turns, spin on oil, tip over at the end.
@@ -681,7 +682,7 @@ function buildCheckout(R, g, y) {
   const hw = w.halfWidth(y) + 0.3;
   const red = mat('#e63946'), white = mat('#ffffff');
   for (const side of [-1, 1]) {
-    grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 4.2, 0.4), red).translateX(side * hw).translateY(2.1));
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 7.2, 0.4), red).translateX(side * hw).translateY(3.6));
     // a till with a conveyor belt
     grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 2.6), white).translateX(side * (hw + 1)).translateY(0.45).translateZ(1.2));
     grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 2.4), mat('#222222')).translateX(side * (hw + 1)).translateY(0.92).translateZ(1.2));
@@ -699,7 +700,7 @@ function buildCheckout(R, g, y) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sign = new THREE.Mesh(new THREE.BoxGeometry(hw * 2 + 0.4, 1.1, 0.3), [red, red, red, red, new THREE.MeshBasicMaterial({ map: tex }), new THREE.MeshBasicMaterial({ map: tex })]);
-  sign.position.y = 4.4;
+  sign.position.y = 7.4; // high enough for a tall pile (and the camera) to pass under
   grp.add(sign);
   // A checkered finish line.
   for (let i = 0; i < Math.ceil(hw * 4); i++) for (let j = 0; j < 2; j++) {

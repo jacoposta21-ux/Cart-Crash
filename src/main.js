@@ -2,7 +2,7 @@
 import { BUILD } from './build.js';
 import { createGame, step, drainEvents, result, count, handling, listProgress, extras, LIVES, EXTRA_PENALTY } from './game.js';
 import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon } from './render3d.js';
-import { botSteer } from './bot.js';
+import { botSteer, POLICIES } from './bot.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
@@ -388,7 +388,8 @@ function newDemo() {
 function frame(dt) {
   if (mode === 'play' && game) {
     const autopilot = params.has('autopilot');
-    simulate(game, dt, () => (autopilot ? botSteer(game) : readInput()), true);
+    const policy = POLICIES[params.get('policy')] || POLICIES.bot;
+    simulate(game, dt, () => (autopilot ? policy(game) : readInput()), true);
     const sec = game.world.sectionAt(game.cart.y + 12).kind;
     if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && game.checkoutY === null) toast(t(SECTION_TOAST[sec])); }
     audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.over);
@@ -520,8 +521,9 @@ if (TEST) {
     /** Simulates `seconds` of riding at once (the bot drives unless an input is given). */
     run(seconds, input = null) {
       const n = Math.round(seconds / DT);
+      const policy = POLICIES[params.get('policy')] || POLICIES.bot;
       for (let i = 0; i < n && mode === 'play'; i++) {
-        step(game, DT, input === null ? botSteer(game) : input);
+        step(game, DT, input === null ? policy(game) : input);
         handleEvents(game, drainEvents(game), false);
         if (game.over && game.overT > 1.6) { finish(); break; }
       }
