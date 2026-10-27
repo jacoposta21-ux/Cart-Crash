@@ -49,7 +49,7 @@ window.addEventListener('resize', resize);
 // Held: steering and the brake. Pressed: jump and drop (used by the next step).
 const keys = { left: false, right: false, brake: false };
 const pressed = { jump: false, drop: false, release: false };
-const pointers = new Map(); // id → { x0, y0, t0, side, brake }
+const pointers = new Map(); // id → { x0, y0, side, brake, jumped }
 function readInput() {
   let l = keys.left, r = keys.right, brake = keys.brake;
   for (const p of pointers.values()) {
@@ -83,14 +83,14 @@ const sideOf = (x) => (x < window.innerWidth / 2 ? -1 : 1);
 canvas.addEventListener('pointerdown', (e) => {
   audio.unlock();
   if (mode !== 'play') return;
-  pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, t0: performance.now(), side: sideOf(e.clientX), brake: false, jumped: false });
+  pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, side: sideOf(e.clientX), brake: false, jumped: false });
   try { canvas.setPointerCapture(e.pointerId); } catch { /* optional */ }
 });
 canvas.addEventListener('pointermove', (e) => {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   const dy = e.clientY - p.y0;
-  if (!p.jumped && !p.brake && dy < -SWIPE && performance.now() - p.t0 < 600) { p.jumped = true; pressed.jump = true; }
+  if (!p.jumped && !p.brake && dy < -SWIPE) { p.jumped = true; pressed.jump = true; } // one jump per touch
   if (!p.brake && dy > SWIPE) p.brake = true;
   if (!p.brake) p.side = sideOf(e.clientX);
 });
