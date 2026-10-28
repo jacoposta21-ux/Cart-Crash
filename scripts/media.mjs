@@ -2,8 +2,9 @@
 //   crazygames/cover-1920x1080.png    landscape cover
 //   crazygames/cover-800x1200.png     portrait cover (2:3)
 //   crazygames/cover-800x800.png      square cover
+//   playgama/cover-1920x1080.png, cover-1080x1920.png, cover-800x800.png   the same for Playgama
 // Usage: node scripts/media.mjs covers
-// The preview videos come from scripts/highlights.mjs.
+// The preview videos come from scripts/trailer.mjs.
 // The icons in assets/ come from the logo (brand/logo-transparent.png).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,7 +16,7 @@ const EXECUTABLE = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1243/
 const want = process.argv.slice(2);
 const all = want.length === 0;
 const SEED = 572; // a race with a red light and its crowd, a dog, a jump and the checkout, all within 30 s
-mkdirSync(join(ROOT, 'crazygames'), { recursive: true });
+for (const d of ['crazygames', 'playgama']) mkdirSync(join(ROOT, d), { recursive: true });
 mkdirSync(join(ROOT, 'assets'), { recursive: true });
 
 const server = await startServer(8121, join(ROOT, 'dist'));
@@ -30,11 +31,12 @@ async function open(viewport, query) {
 }
 
 if (all || want.includes('covers')) {
-  for (const [w, h, secs] of [[1920, 1080, 12.9], [800, 1200, 12.9], [800, 800, 12.9]]) {
+  const COVERS = { crazygames: [[1920, 1080], [800, 1200], [800, 800]], playgama: [[1920, 1080], [1080, 1920], [800, 800]] };
+  for (const [dir, w, h] of Object.entries(COVERS).flatMap(([d, sizes]) => sizes.map(([w, h]) => [d, w, h]))) {
     const page = await open({ width: w, height: h }, '');
-    await page.evaluate((s) => window.__cc.poster(s, true), secs);
-    await page.screenshot({ path: join(ROOT, 'crazygames', `cover-${w}x${h}.png`) });
-    console.log(`cover ${w}x${h}`);
+    await page.evaluate((s) => window.__cc.poster(s, true), 12.9);
+    await page.screenshot({ path: join(ROOT, dir, `cover-${w}x${h}.png`) });
+    console.log(`${dir}: cover ${w}x${h}`);
     await page.close();
   }
 }

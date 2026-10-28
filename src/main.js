@@ -1,4 +1,4 @@
-// Cart Crash: screens, input, the game loop, records and the CrazyGames hooks.
+// Cart Crash: screens, input, the game loop, records and the portal hooks.
 import { BUILD } from './build.js';
 import { createGame, step, drainEvents, result, count, handling, listProgress, extras, LIVES, EXTRA_PENALTY } from './game.js';
 import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon } from './render3d.js';
@@ -6,10 +6,10 @@ import { botSteer, POLICIES } from './bot.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
-import * as portal from './portal.js';
+import { portal } from './portal.js';
 import { ITEM_NAME, GOODS_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST } from './strings.js';
 
-const PORTAL = BUILD.target === 'crazygames';
+const PORTAL = BUILD.target !== 'web';
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
 const DT = 1 / 120;
@@ -139,6 +139,26 @@ function renderMenu() {
     });
 }
 
+/** Records also go to the portal's own storage (cloud saves on Playgama). */
+function saveProgress(key, value) {
+  save(key, value);
+  portal.saveProgress(key, value);
+}
+
+/** Between rides the portal may show an ad: silence while it runs, then go on. */
+let breaking = false;
+async function afterRide(next) {
+  if (breaking) return;
+  breaking = true;
+  await portal.adBreak((on) => { mutes.ad = on; applyMute(); });
+  breaking = false;
+  if (mode === 'end') next();
+}
+
+// The portal's mute, its pause and its ads all silence the game.
+const mutes = { portal: false, pause: false, ad: false };
+const applyMute = () => audio.setPortalMuted(mutes.portal || mutes.pause || mutes.ad);
+
 function goMenu() {
   mode = 'menu';
   portal.gameplay(false);
@@ -166,7 +186,7 @@ function start() {
   showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop · Q balloon'), 3500);
   portal.gameplay(true);
   audio.startMusic();
-  save(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
+  saveProgress(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
 }
 
 function pause() {
@@ -197,7 +217,7 @@ function finish() {
   const r = result(game);
   const best = load(BEST_KEY, null);
   const isRecord = r.won && (best === null || r.total < best);
-  if (isRecord) save(BEST_KEY, r.total);
+  if (isRecord) saveProgress(BEST_KEY, r.total);
   renderEnd(r, isRecord, best);
   show('screen-end');
   if (isRecord) { audio.record(); portal.happytime(); }
@@ -463,8 +483,8 @@ function translatePage() {
 function wire() {
   const on = (id, fn) => $(id).addEventListener('click', () => { audio.unlock(); audio.click(); fn(); });
   on('btn-play', start);
-  on('btn-again', start);
-  on('btn-menu', goMenu);
+  on('btn-again', () => afterRide(start));
+  on('btn-menu', () => afterRide(goMenu));
   on('btn-pause', pause);
   on('btn-resume', resume);
   on('btn-restart', start);
@@ -502,7 +522,15 @@ if (portalReady) portal.loading(true);
 await initI18n(portalReady ? portal.locale() : null);
 await document.fonts?.load?.('40px "Lilita One"').catch(() => {});
 translatePage();
-if (portalReady) portal.onMute((muted) => { audio.setPortalMuted(muted); });
+if (portalReady) {
+  portal.onMute((muted) => { mutes.portal = muted; applyMute(); });
+  portal.onPause((paused) => { mutes.pause = paused; applyMute(); if (paused) pause(); });
+  // Records saved on the platform win over this device's (a new device, cleared data).
+  const cloud = await portal.loadProgress([BEST_KEY, RIDES_KEY]);
+  const best = load(BEST_KEY, null);
+  if (typeof cloud[BEST_KEY] === 'number' && (best === null || cloud[BEST_KEY] < best)) save(BEST_KEY, cloud[BEST_KEY]);
+  if (typeof cloud[RIDES_KEY] === 'number' && cloud[RIDES_KEY] > (load(RIDES_KEY, 0) || 0)) save(RIDES_KEY, cloud[RIDES_KEY]);
+}
 goMenu();
 render(R, demo, 0);
 $('loading').hidden = true;

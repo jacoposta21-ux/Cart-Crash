@@ -1,9 +1,10 @@
 // End-to-end checks in headless Chromium (no test framework).
-// Runs against dist/ and dist-crazygames/ (`npm run test:e2e` builds both).
+// Runs against dist/, dist-crazygames/ and dist-playgama/ (`npm run test:e2e` builds them).
 //   - menu, ride, pause, end screen and settings on a phone, a landscape phone and a desktop
 //   - nothing scrolls, every button is at least 44px, no console errors
 //   - keyboard and touch steering, language switch, storage blocked
 //   - the CrazyGames build against a fake SDK: init, loading, gameplay start/stop, mute, locale
+//   - the Playgama build against a fake Bridge: game_ready, gameplay, language, audio, pause, ads, cloud saves
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -41,6 +42,7 @@ const visible = (page, sel) => page.evaluate((s) => { const el = document.queryS
 
 const server = await startServer(8097, join(ROOT, 'dist'));
 const serverCg = await startServer(8098, join(ROOT, 'dist-crazygames'));
+const serverPg = await startServer(8099, join(ROOT, 'dist-playgama'));
 const browser = await chromium.launch({ executablePath: EXECUTABLE, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 
 const VIEWPORTS = [
@@ -227,15 +229,17 @@ log('\n▶ privacy page and links');
   const res = await fetch('http://127.0.0.1:8097/privacy.html');
   const html = await res.text();
   check(res.ok && html.includes('help@trustyourbot.com'), 'privacy.html is served with the contact address');
-  for (const dir of ['dist', 'dist-crazygames']) {
+  for (const dir of ['dist', 'dist-crazygames', 'dist-playgama']) {
     for (const f of ['index.html', 'privacy.html']) {
       const src = readFileSync(join(ROOT, dir, f), 'utf8');
       const external = [...src.matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((h) => /^(https?:)?\/\//.test(h));
       check(external.length === 0, `${dir}/${f}: no links to other sites (${external.join(', ')})`);
     }
   }
-  const pictures = readdirSync(join(ROOT, 'dist-crazygames', 'assets'));
-  check(pictures.join() === 'logo.webp', `CrazyGames build: no pictures but the logo (${pictures.join(', ')})`);
+  for (const dir of ['dist-crazygames', 'dist-playgama']) {
+    const pictures = readdirSync(join(ROOT, dir, 'assets'));
+    check(pictures.join() === 'logo.webp', `${dir}: no pictures but the logo (${pictures.join(', ')})`);
+  }
 }
 
 log('\n▶ CrazyGames build with a fake SDK (it-IT, muted)');
@@ -277,8 +281,64 @@ log('\n▶ CrazyGames build with a fake SDK (it-IT, muted)');
   await ctx.close();
 }
 
+log('\n▶ Playgama build with a fake Bridge (de, muted, cloud record)');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
+  await ctx.route('https://bridge.playgama.com/v2/stable/playgama-bridge.js', (route) => route.fulfill({ contentType: 'text/javascript', body: readFileSync(join(ROOT, 'e2e', 'fake-playgama-bridge.js'), 'utf8') }));
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto('http://127.0.0.1:8099/?test&manual&seed=3');
+  await page.waitForFunction(() => window.__cc && window.__cc.mode === 'menu');
+  const calls = () => page.evaluate(() => [...window.__sdkCalls]);
+  const last = async () => (await calls()).filter((c) => c.startsWith('gameplay')).pop();
+  const ev = (fn, arg) => page.evaluate(fn, arg);
+  let c = await calls();
+  check(c[0] === 'initialize', 'playgama: initialize first');
+  check(c.filter((x) => x === 'game_ready').length === 1 && c.indexOf('game_ready') > c.indexOf('storage.get'), `playgama: game_ready once, after loading (${c.join(',')})`);
+  check(!c.includes('gameplay_started'), 'playgama: no gameplay on the menu');
+  check((await page.textContent('#btn-play')).trim() === 'Spielen', 'playgama: language from platform.language (de)');
+  check(await ev(() => localStorage.getItem('cartcrash:bestScore')) === '41.5', 'playgama: the record saved on the platform is loaded');
+  check(await ev(() => window.__cc.portalMuted()) === true, 'playgama: audio off on the platform mutes the game');
+  await ev(() => window.__sdkSetAudio(true));
+  check(await ev(() => window.__cc.portalMuted()) === false, 'playgama: audio_state_changed unmutes');
+  await page.click('#btn-play');
+  check(await last() === 'gameplay_started', 'playgama: gameplay_started when the ride starts');
+  check(await ev(() => window.__sdkStore['cartcrash:rides']) === 13, 'playgama: rides saved to the platform storage');
+  await ev(() => window.__sdkPause(true));
+  check(await ev(() => window.__cc.mode) === 'paused' && await ev(() => window.__cc.portalMuted()) === true, 'playgama: pause_state_changed pauses and mutes');
+  check(await last() === 'gameplay_stopped', 'playgama: gameplay_stopped on pause');
+  await ev(() => window.__sdkPause(false));
+  check(await ev(() => window.__cc.mode) === 'paused' && await ev(() => window.__cc.portalMuted()) === false, 'playgama: resuming the platform unmutes, the game waits for the player');
+  await page.click('#btn-resume');
+  await ev(() => { window.__cc.run(10); window.__cc.crashOut(); });
+  await frames(page, 70);
+  check(await ev(() => window.__cc.mode) === 'end' && await last() === 'gameplay_stopped', 'playgama: gameplay_stopped at the end of the ride');
+  await page.click('#btn-again');
+  await page.waitForTimeout(300);
+  c = await calls();
+  check(c.includes('showInterstitial') && await ev(() => window.__cc.mode) === 'end' && await ev(() => window.__cc.portalMuted()) === true, 'playgama: an ad between rides, game muted while it shows');
+  await ev(() => window.__sdkCloseAd());
+  await page.waitForFunction(() => window.__cc.mode === 'play');
+  check(await ev(() => window.__cc.portalMuted()) === false, 'playgama: after the ad the next ride starts, sound back');
+  await ev(() => { window.__cc.run(5); window.__cc.crashOut(); });
+  await frames(page, 70);
+  await ev(() => window.__sdkAdReady(false));
+  await page.click('#btn-menu');
+  await page.waitForFunction(() => window.__cc.mode === 'menu', null, { timeout: 5000 }).catch(() => {});
+  check(await ev(() => window.__cc.mode) === 'menu', 'playgama: no ad available, the game carries on');
+  const html = readFileSync(join(ROOT, 'dist-playgama', 'index.html'), 'utf8');
+  check(html.includes('https://bridge.playgama.com/v2/stable/playgama-bridge.js') && !html.includes('crazygames-sdk'), 'playgama: the Playgama build loads the Bridge SDK only');
+  const config = await (await fetch('http://127.0.0.1:8099/playgama-bridge-config.json')).json().catch(() => null);
+  check(config !== null, 'playgama: playgama-bridge-config.json next to index.html');
+  check(errors.length === 0, `playgama: console errors ${errors.join(' | ')}`);
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 serverCg.close();
+serverPg.close();
 console.log(`\n${passes} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.log(`  ✗ ${f}`); process.exit(1); }

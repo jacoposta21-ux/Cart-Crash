@@ -85,8 +85,9 @@ un anello bianco.
 npm install
 npm run dev               # build web in dist/ e server su http://127.0.0.1:8080
 npm test                  # test unitari (mondo, lista, cassa, freno, salto, cani, semafori, treni, traduzioni)
-npm run test:e2e          # Playwright: telefono, telefono orizzontale, desktop, build CrazyGames con SDK finto
+npm run test:e2e          # Playwright: telefono, telefono orizzontale, desktop, build CrazyGames e Playgama con SDK finti
 npm run build:crazygames  # dist-crazygames/ e crazygames/cart-crash-crazygames.zip
+npm run build:playgama    # dist-playgama/ e playgama/cart-crash-playgama.zip
 npm run media             # copertine, icone e video di anteprima ricavati dal gioco
 npm run shots             # screenshot rapidi per controllare la grafica
 ```
@@ -128,3 +129,26 @@ raccontata in ordine, un brivido dopo l'altro: la lista, il salto, il cane,
 il rosso passato sfiorando la folla col vigile alle calcagna, la frenata
 all'ultimo davanti al treno, lo sprint alla cassa col tempo. Scritte che
 cambiano a ogni momento, il logo all'inizio e alla fine, le soste accelerate.
+
+## Playgama
+
+`npm run build:playgama` produce `dist-playgama/` e lo zip
+`playgama/cart-crash-playgama.zip` (con `index.html` alla radice, da caricare
+così com'è). La build carica il **Playgama Bridge SDK**
+(`https://bridge.playgama.com/v2/stable/playgama-bridge.js`) e porta con sé
+`playgama-bridge-config.json` (`src/portal-playgama.js`):
+
+- `bridge.initialize()` all'avvio, `game_ready` una sola volta a caricamento
+  finito;
+- `gameplay_started` / `gameplay_stopped` come su CrazyGames (gara, pausa,
+  menu, fine gara);
+- lingua da `bridge.platform.language`;
+- audio: segue `isAudioEnabled` e `audio_state_changed`;
+- pausa: su `pause_state_changed` il gioco va in pausa e si zittisce;
+- record e numero di gare salvati anche con `bridge.storage` (cloud save);
+- un **interstitial** tra una gara e l'altra (su "Gioca ancora" e "Menu"), con
+  il gioco muto finché è aperto; Playgama decide se e quando c'è un annuncio,
+  con almeno 60 s tra uno e l'altro (`playgama-bridge-config.json`).
+
+Copertine in `playgama/`: `cover-1920x1080.png`, `cover-1080x1920.png`,
+`cover-800x800.png` (da `npm run media`). I video sono quelli di `crazygames/`.

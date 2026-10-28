@@ -1,7 +1,9 @@
 // Builds dist/: copies the static game and writes dist/src/build.js.
-// --target=crazygames: the portal build (loads the CrazyGames SDK v3, fit rules).
-// It carries no pictures but the logo the game shows: icons and covers are
-// uploaded to the portal on their own.
+// --target=crazygames: the CrazyGames build (loads the CrazyGames SDK v3).
+// --target=playgama: the Playgama build (loads the Playgama Bridge SDK, with
+// playgama-bridge-config.json next to index.html).
+// Portal builds carry no pictures but the logo the game shows: icons and covers
+// are uploaded to the portal on their own.
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, argValue } from './lib/util.mjs';
@@ -13,15 +15,21 @@ const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'src'), { recursive: true });
 let html = readFileSync(join(ROOT, 'index.html'), 'utf8');
-if (target === 'crazygames') {
+const SDK = {
+  crazygames: 'https://sdk.crazygames.com/crazygames-sdk-v3.js',
+  playgama: 'https://bridge.playgama.com/v2/stable/playgama-bridge.js',
+};
+if (!['web', ...Object.keys(SDK)].includes(target)) throw new Error(`unknown target: ${target}`);
+if (SDK[target]) {
   html = html.replace('<link rel="stylesheet" href="styles.css">',
-    '<link rel="stylesheet" href="styles.css">\n  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>');
+    `<link rel="stylesheet" href="styles.css">\n  <script src="${SDK[target]}"></script>`);
 }
-const portal = target === 'crazygames';
+const portal = target !== 'web';
 const noIcon = (s) => (portal ? s.replace(/\n\s*<link rel="icon"[^>]*>/, '') : s);
 writeFileSync(join(out, 'index.html'), noIcon(html));
 writeFileSync(join(out, 'privacy.html'), noIcon(readFileSync(join(ROOT, 'privacy.html'), 'utf8')));
 cpSync(join(ROOT, 'styles.css'), join(out, 'styles.css'));
+if (target === 'playgama') cpSync(join(ROOT, 'playgama-bridge-config.json'), join(out, 'playgama-bridge-config.json'));
 cpSync(join(ROOT, 'vendor'), join(out, 'vendor'), { recursive: true });
 cpSync(join(ROOT, 'assets'), join(out, 'assets'), { recursive: true, filter: (p) => !portal || !/icon-\d+\.png$/.test(p) });
 cpSync(join(ROOT, 'src'), join(out, 'src'), { recursive: true, filter: (p) => !p.endsWith('build.js') });
