@@ -2,7 +2,8 @@
 //   crazygames/cover-1920x1080.png    landscape cover
 //   crazygames/cover-800x1200.png     portrait cover (2:3)
 //   crazygames/cover-800x800.png      square cover
-//   playgama/cover-1920x1080.png, cover-1080x1920.png, cover-800x800.png   the same for Playgama
+//   playgama/cover-800x800.png        square cover for Playgama (its 1920x1080 and
+//   1080x1920 covers are the artwork in brand/cover-art-*.webp, cropped to size)
 // Usage: node scripts/media.mjs covers
 // The preview videos come from scripts/trailer.mjs.
 // The icons in assets/ come from the logo (brand/logo-transparent.png).
@@ -31,7 +32,7 @@ async function open(viewport, query) {
 }
 
 if (all || want.includes('covers')) {
-  const COVERS = { crazygames: [[1920, 1080], [800, 1200], [800, 800]], playgama: [[1920, 1080], [1080, 1920], [800, 800]] };
+  const COVERS = { crazygames: [[1920, 1080], [800, 1200], [800, 800]], playgama: [[800, 800]] };
   for (const [dir, w, h] of Object.entries(COVERS).flatMap(([d, sizes]) => sizes.map(([w, h]) => [d, w, h]))) {
     const page = await open({ width: w, height: h }, '');
     await page.evaluate((s) => window.__cc.poster(s, true), 12.9);

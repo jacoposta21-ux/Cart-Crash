@@ -150,5 +150,6 @@ così com'è). La build carica il **Playgama Bridge SDK**
   il gioco muto finché è aperto; Playgama decide se e quando c'è un annuncio,
   con almeno 60 s tra uno e l'altro (`playgama-bridge-config.json`).
 
-Copertine in `playgama/`: `cover-1920x1080.png`, `cover-1080x1920.png`,
-`cover-800x800.png` (da `npm run media`). I video sono quelli di `crazygames/`.
+Copertine in `playgama/`: `cover-1920x1080.png` e `cover-1080x1920.png` sono
+l'illustrazione in `brand/cover-art-*.webp` ritagliata alla misura;
+`cover-800x800.png` viene da `npm run media`. I video sono quelli di `crazygames/`.
