@@ -1,7 +1,7 @@
 // Store materials, rendered from the game itself (build dist/ first):
 //   crazygames/cover-1920x1080.png    landscape cover
-//   crazygames/cover-800x1200.png     portrait cover (2:3)  } from the artwork
-//   crazygames/cover-800x800.png      square cover          } brand/cover-art-tall.webp
+//   crazygames/cover-800x1200.png     portrait cover (2:3)  } from brand/cover-art-tall.webp
+//   crazygames/cover-800x800.png      square cover          } and brand/cover-art-square.webp
 //   playgama/cover-800x800.png        square cover for Playgama (its 1920x1080 and
 //   1080x1920 covers are the artwork in brand/cover-art-*.webp, cropped to size)
 // Usage: node scripts/media.mjs covers
@@ -41,10 +41,9 @@ if (all || want.includes('covers')) {
     console.log(`${dir}: cover ${w}x${h}`);
     await page.close();
   }
-  // The portrait cover: the artwork cut to size. The square one: all of it, on a blurred copy of itself.
-  const art = join(ROOT, 'brand', 'cover-art-tall.webp'); // 1080x1920
-  for (const [size, vf] of [['800x1200', 'scale=800:-1:flags=lanczos,crop=800:1200:0:60'], ['800x800', 'split[a][b];[a]scale=800:800:force_original_aspect_ratio=increase:flags=lanczos,crop=800:800,boxblur=24:2,eq=brightness=-0.04[bg];[b]scale=-1:800:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:0']]) {
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', art, '-filter_complex', vf, join(ROOT, 'crazygames', `cover-${size}.png`)]);
+  // The portrait and square covers: the artwork (1080x1920 and 1024x1024), cut or scaled to size.
+  for (const [size, vf, art] of [['800x1200', 'scale=800:-1:flags=lanczos,crop=800:1200:0:60', 'tall'], ['800x800', 'scale=800:800:flags=lanczos', 'square']]) {
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(ROOT, 'brand', `cover-art-${art}.webp`), '-vf', vf, join(ROOT, 'crazygames', `cover-${size}.png`)]);
     console.log(`crazygames: cover ${size}`);
   }
 }

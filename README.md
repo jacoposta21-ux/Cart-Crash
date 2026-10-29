@@ -190,7 +190,7 @@ Materiali in `crazygames/`, generati dal gioco con `npm run media` (il logo è
 sovrapposto alle copertine):
 
 - copertine `cover-1920x1080.png` (dal gioco), `cover-800x1200.png` (2:3) e
-  `cover-800x800.png` (ritagliate dall'illustrazione `brand/cover-art-tall.webp`);
+  `cover-800x800.png` (dalle illustrazioni `brand/cover-art-tall.webp` e `brand/cover-art-square.webp`);
 - video `preview-1920x1080.mp4` e `preview-1080x1620.mp4` (2:3), circa 26 s;
   in `playgama/` lo stesso video verticale `preview-1080x1920.mp4` (9:16).
 
