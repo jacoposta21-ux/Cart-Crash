@@ -190,14 +190,15 @@ Materiali in `crazygames/`, generati dal gioco con `npm run media` (il logo è
 sovrapposto alle copertine):
 
 - copertine `cover-1920x1080.png`, `cover-800x1200.png` (2:3), `cover-800x800.png`;
-- trailer `preview-1920x1080.mp4` e `preview-1080x1620.mp4` (2:3), circa 30 s.
+- video `preview-1920x1080.mp4` e `preview-1080x1620.mp4` (2:3), circa 26 s;
+  in `playgama/` lo stesso video verticale `preview-1080x1920.mp4` (9:16).
 
-Il trailer (`scripts/trailer.mjs`) è registrato dal gioco vero, fotogramma per
-fotogramma: una sola gara preparata apposta (`scripts/trailer-stage.mjs`) e
-raccontata in ordine, un brivido dopo l'altro: la lista, il salto, il cane,
-il rosso passato sfiorando la folla col vigile alle calcagna, la frenata
-all'ultimo davanti al treno, lo sprint alla cassa col tempo. Scritte che
-cambiano a ogni momento, il logo all'inizio e alla fine, le soste accelerate.
+I video (`scripts/montage.mjs`) sono registrati dal gioco vero, fotogramma per
+fotogramma, senza scritte: il logo, poi sei spezzoni di gara guidati dal bot e
+uniti in dissolvenza, che passano per tutte e cinque le piste, tutti e cinque i
+carrelli e due partite Arcade a tre carrelli (treno nel Borgo, pontile al Mare,
+pista da sci, ponte di corda sulla lava, frecce turbo sull'Arcobaleno), e di
+nuovo il logo.
 
 ## Playgama
 

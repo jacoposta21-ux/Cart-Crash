@@ -766,14 +766,17 @@ if (TEST) {
     refresh() { renderMenu(); renderGarage(); },
     frame: (dt = 1 / 30) => frame(dt),
     press: (what) => { pressed[what] = true; },
-    /** Simulates `seconds` of riding at once (the bot drives unless an input is given). */
+    /** Simulates `seconds` of riding at once (the bot drives unless an input is given; in Arcade, every cart). */
     run(seconds, input = null) {
       const n = Math.round(seconds / DT);
       const policy = POLICIES[params.get('policy')] || POLICIES.bot;
       for (let i = 0; i < n && mode === 'play'; i++) {
-        step(game, DT, input === null ? policy(game) : input);
+        if (match) {
+          stepMatch(match, DT, input === null ? policy(game) : input);
+          for (const g of match.games.slice(1)) drainEvents(g);
+        } else step(game, DT, input === null ? policy(game) : input);
         handleEvents(game, drainEvents(game), false);
-        if (game.over && game.overT > 1.6) { finish(); break; }
+        if (match ? match.over : game.over && game.overT > 1.6) { finish(); break; }
       }
       if (mode === 'play') updateHud(false);
     },

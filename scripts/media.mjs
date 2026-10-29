@@ -5,7 +5,7 @@
 //   playgama/cover-800x800.png        square cover for Playgama (its 1920x1080 and
 //   1080x1920 covers are the artwork in brand/cover-art-*.webp, cropped to size)
 // Usage: node scripts/media.mjs covers
-// The preview videos come from scripts/trailer.mjs.
+// The preview videos come from scripts/montage.mjs.
 // The icons in assets/ come from the logo (brand/logo-transparent.png).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
