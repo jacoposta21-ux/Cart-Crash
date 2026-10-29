@@ -785,14 +785,24 @@ export function makePlow() {
   return g;
 }
 
-/** A whale leaping across, head at x = 0, swimming towards +x. */
-export function makeWhale() {
+/** A giant wave rolling across the pier: front at x = 0, running towards +x, as long as a few metres of pier. */
+export function makeBigWave() {
   const g = new THREE.Group();
-  const body = mesh(sph(1.6, 12, 8), mat('#3d5a80'), -5, 0, 0); body.scale.set(4, 1.1, 1.2); g.add(body);
-  const belly = mesh(sph(1.55, 12, 8), mat('#e0e7ee'), -4.6, -0.45, 0); belly.scale.set(3.6, 0.7, 1.05); g.add(belly);
-  for (const z of [-1.4, 1.4]) { const fin = mesh(box(1.4, 0.15, 1.2), mat('#2b4162'), -3.2, -0.6, z); fin.rotation.x = z > 0 ? 0.5 : -0.5; g.add(fin); }
-  const tail = mesh(box(1.2, 0.2, 3.2), mat('#2b4162'), -11.5, 0.3, 0); g.add(tail);
-  for (const z of [-0.6, 0.6]) g.add(mesh(sph(0.15, 6, 4), mat('#1d1e24'), -0.9, 0.35, z * 1.6));
+  const deep = mat('#1f78c1', { opacity: 0.92 }), light = mat('#4fb3ea', { opacity: 0.9 }), foam = mat('#f4fbff');
+  // the body of water, rising towards the front
+  const body = mesh(box(5.5, 3.2, 8.5), deep, -3.2, 0.4, 0);
+  g.add(body);
+  const face = mesh(box(1.6, 4.2, 8.6), light, -0.9, 1.0, 0);
+  face.rotation.z = -0.35;
+  g.add(face);
+  // the curl over the front, with foam along the crest
+  const curl = new THREE.Group();
+  curl.position.set(-0.6, 3.1, 0);
+  curl.add(mesh(box(2.4, 0.9, 8.7), light, 0.7, 0.1, 0));
+  for (let i = 0; i < 9; i++) curl.add(mesh(sph(0.55, 7, 5), foam, 1.6 + (i % 2) * 0.3, 0.35 + (i % 3) * 0.12, -4 + i));
+  g.add(curl);
+  for (let i = 0; i < 7; i++) g.add(mesh(sph(0.6, 7, 5), foam, -0.2 + (i % 2) * 0.4, -0.6, -3.6 + i * 1.2));
+  g.userData.curl = curl;
   return g;
 }
 

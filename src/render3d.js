@@ -9,7 +9,7 @@ import { buildSection } from './town.js';
 import {
   makeItem, makeBalloon, makeCart, makeObstacle, makeWalker, animateWalker, makePigeon,
   makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain, makeCop, makeCoin,
-  makeAnimal, animateAnimal, makePlow, makeWhale, makeRoller, makeHeart, makeWave,
+  makeAnimal, animateAnimal, makePlow, makeBigWave, makeRoller, makeHeart, makeWave,
 } from './models.js';
 import { buildBackdrop } from './town.js';
 import { TRACKS } from './tracks.js';
@@ -52,6 +52,7 @@ export function createRenderer(canvas, fxLayer) {
     dogs: new Map(),
     cops: new Map(),
     rollers: new Map(),
+    decks: new Map(),
     backdrop: null,
     checkout: null,
     dropping: new Set(),
@@ -87,6 +88,8 @@ export function resizeRenderer(R, W, H) {
 export function setGame(R, g) {
   for (const m of R.sections.values()) { R.scene.remove(m); m.geometry.dispose(); }
   R.sections.clear();
+  for (const d of R.decks.values()) R.scene.remove(d);
+  R.decks.clear();
   for (const o of R.objs.values()) R.scene.remove(o.obj);
   R.objs.clear();
   for (const d of R.debris) R.scene.remove(d.obj);
@@ -294,11 +297,44 @@ function syncSections(R, g) {
       const m = buildSection(w, s);
       R.scene.add(m);
       R.sections.set(s, m);
+      if (s.kind === 'bridge') { const d = buildDeck(w, s); R.scene.add(d); R.decks.set(s, d); }
+    }
+    const deck = R.decks.get(s);
+    if (deck && s.fallY !== undefined) {
+      // the planks behind the collapse drop into the chasm, tumbling
+      for (const p of deck.children) {
+        const drop = s.fallY - p.userData.y;
+        if (drop <= 0) continue;
+        p.position.y = p.userData.e - drop * drop * 0.05;
+        p.rotation.x = drop * 0.12 * p.userData.spin;
+        p.rotation.z = drop * 0.04 * p.userData.spin;
+        p.visible = drop < 40;
+      }
     }
   }
   for (const [s, m] of R.sections) {
-    if (!live.has(s)) { R.scene.remove(m); m.geometry.dispose(); R.sections.delete(s); }
+    if (!live.has(s)) {
+      R.scene.remove(m); m.geometry.dispose(); R.sections.delete(s);
+      const d = R.decks.get(s);
+      if (d) { R.scene.remove(d); R.decks.delete(s); }
+    }
   }
+}
+
+/** The planks of a rope bridge, one mesh each (they fall when the bridge gives way). */
+const plankGeo = new THREE.BoxGeometry(1, 0.12, 0.52);
+function buildDeck(w, s) {
+  const grp = new THREE.Group();
+  let i = 0;
+  for (let yy = s.start + 0.3; yy < s.end; yy += 0.6, i++) {
+    const p = new THREE.Mesh(plankGeo, mat(i % 2 ? '#a9784a' : '#8d6238'));
+    const e = w.elevation(yy) - 0.06;
+    p.scale.x = w.halfWidth(yy) * 2 + 0.1;
+    p.position.set(w.center(yy), e, -yy);
+    p.userData = { y: yy, e, spin: hashf(i, 7) < 0.5 ? -1 : 1 };
+    grp.add(p);
+  }
+  return grp;
 }
 
 const ringGeo = new THREE.RingGeometry(0.42, 0.52, 24).rotateX(-Math.PI / 2);
@@ -738,23 +774,23 @@ function buildRail(g, e) {
   const grp = new THREE.Group();
   const hw = g.world.halfWidth(e.y);
   const len = hw * 2 + 40;
-  if (e.vehicle === 'whale' || e.vehicle === 'plow') {
-    // No tracks: buoys (whale) or orange posts (snowplow) at the sides, a stop line, and what comes.
-    const stop = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 0.03, 0.35), mat(e.vehicle === 'whale' ? '#ffffff' : '#ff8c00'));
+  if (e.vehicle === 'bigwave' || e.vehicle === 'plow') {
+    // No tracks: buoys (big wave) or orange posts (snowplow) at the sides, a stop line, and what comes.
+    const stop = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 0.03, 0.35), mat(e.vehicle === 'bigwave' ? '#ffffff' : '#ff8c00'));
     stop.position.set(0, 0.04, RAIL_STOP);
     grp.add(stop);
     const posts = [];
     for (const side of [-1, 1]) {
       const p = new THREE.Group();
-      p.position.set(side * (hw + 0.6), e.vehicle === 'whale' ? -1.2 : 0, RAIL_STOP - 0.6);
-      p.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 1.4, 8), mat(e.vehicle === 'whale' ? '#e63946' : '#ff8c00')).translateY(0.7));
+      p.position.set(side * (hw + 0.6), e.vehicle === 'bigwave' ? -1.2 : 0, RAIL_STOP - 0.6);
+      p.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 1.4, 8), mat(e.vehicle === 'bigwave' ? '#e63946' : '#ff8c00')).translateY(0.7));
       p.add(new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.3, 8), mat('#ffffff')).translateY(0.9));
       const lamp = new THREE.MeshBasicMaterial({ color: '#441111' });
       p.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lamp).translateY(1.55));
       grp.add(p);
       posts.push(lamp);
     }
-    const train = e.vehicle === 'whale' ? makeWhale() : makePlow();
+    const train = e.vehicle === 'bigwave' ? makeBigWave() : makePlow();
     train.visible = false;
     grp.add(train);
     grp.userData = { barriers: [], posts, train };
@@ -802,11 +838,11 @@ function updateRail(R, g, e, obj) {
   if (span) {
     train.position.x = span.front - obj.position.x;
     train.rotation.y = e.dir > 0 ? 0 : Math.PI;
-    if (e.vehicle === 'whale') {
-      // up out of the sea, over the pier and back down
+    if (e.vehicle === 'bigwave') {
+      // it rises out of the sea, rolls over the pier and sinks back
       const k2 = Math.max(0, Math.min(1, (g.t - e.t0 - RAIL_WARN) / crossTime(g, e)));
-      train.position.y = -2.5 + Math.sin(k2 * Math.PI) * 4.2;
-      train.rotation.z = (e.dir > 0 ? 1 : -1) * Math.cos(k2 * Math.PI) * 0.5;
+      train.scale.y = 0.35 + Math.sin(k2 * Math.PI) * 0.65;
+      train.userData.curl.rotation.z = -0.3 + Math.sin(R.t * 3) * 0.08;
     }
   }
 }

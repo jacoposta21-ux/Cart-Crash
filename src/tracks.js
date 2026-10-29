@@ -5,7 +5,7 @@
 //              lake, goats, the snowplow.
 //   Sea        narrow piers over the water (fall in and you lose a life) from
 //              island to island, gaps to jump, waves, crabs, gulls that steal,
-//              a whale crossing.
+//              a giant wave sweeping over the pier.
 //   Volcano    a boulder rolling after you all the way, lava rivers to jump,
 //              rope bridges, geysers, monkeys that steal.
 //   Rainbow    a rainbow in space with no walls at all, turbo arrows and
@@ -46,7 +46,7 @@ export const TRACKS = {
     hemi: ['#ecf9ff', '#bfa983', 1.95], sun: ['#fff6e0', 1.8],
     sections: { pier: 3, island: 2.4 },
     speed: 1.4, d0: 0.35, busy: 0.97, curve: 1.15, hw: 1,
-    lights: [], crossing: { vehicle: 'whale', on: ['pier'] },
+    lights: [], crossing: { vehicle: 'bigwave', on: ['pier'] },
     animal: 'crab', thief: 'gull', roller: null, void: false, birds: 'gull',
     listSize: 4, bonus: 50, first: 300,
   },

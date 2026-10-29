@@ -398,7 +398,7 @@ const inGap = (gaps, y0, y1) => gaps.some((g) => (y0 + y1) / 2 > g.y && (y0 + y1
  * The road surface (with stairs and gaps), its two edges and the ground to the
  * sides. color(i, y0) gives the road colour of a strip; side(B, pt, y0, y1, e0, e1, a, b, sideSign) draws the sides.
  */
-function road(B, world, s, { color, edge = null, riser = '#9a8f80', step = 1.5, sideFn = null }) {
+function road(B, world, s, { color, edge = null, riser = '#9a8f80', step = 1.5, sideFn = null, deck = true }) {
   const { ys, gaps } = samples(world, s, step);
   const stairs = s.kind === 'stairs';
   const C = (y) => world.center(y), HW = (y) => world.halfWidth(y);
@@ -409,7 +409,7 @@ function road(B, world, s, { color, edge = null, riser = '#9a8f80', step = 1.5, 
     const pt = (x, y, e, h = 0) => [x, e + h, -y];
     const c0 = C(y0), c1 = C(y1), h0 = HW(y0), h1 = HW(y1);
     const gap = inGap(gaps, y0, y1);
-    if (!gap) {
+    if (!gap && deck) {
       B.quad(pt(c0 - h0, y0, e0), pt(c0 + h0, y0, e0), pt(c1 + h1, y1, e1), pt(c1 - h1, y1, e1), color(i, y0));
       if (stairs) {
         const e2 = world.elevation(y1 + 0.01);
@@ -553,7 +553,7 @@ function buildJungle(world, s) {
   const gaps = road(B, world, s, {
     step: bridge ? 0.6 : 1.5,
     color: (i) => (bridge ? (i % 2 ? '#a9784a' : '#8d6238') : stairs ? (i % 2 ? '#9b948c' : '#8a837b') : i % 2 ? '#9b6b43' : '#916240'),
-    edge: bridge ? '#5c3d22' : null,
+    deck: !bridge, // a bridge's planks are drawn one by one (they fall: src/render3d.js)
     riser: '#6f6860',
     sideFn: (a) => {
       const { pt, y0, y1, e0, e1, c0, c1, h0, h1, gap, i } = a;

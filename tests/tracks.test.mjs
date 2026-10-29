@@ -206,8 +206,9 @@ test('the boulder rolls after you on the Volcano: stop and it squashes you', () 
   assert.equal(g.lives, 3, 'rolling on, it never catches up');
   const ev = [];
   for (let i = 0; i < 8 / DT && !ev.some((e) => e.type === 'squashed'); i++) { step(g, DT, { steer: 0, brake: true }); ev.push(...drainEvents(g)); }
-  assert.ok(ev.some((e) => e.type === 'squashed'));
-  assert.equal(g.lives, 2);
+  const sq = ev.find((e) => e.type === 'squashed');
+  assert.ok(sq);
+  assert.ok(g.lives < 3, 'a life lost');
   assert.ok(g.rollers.length === 1 && g.rollers[0].gap > 5, 'it drops back and keeps coming');
 });
 
@@ -271,8 +272,8 @@ test('a fast cart shakes off chasers sooner, a slow one later', () => {
   assert.ok(time('iron') > time('classic'));
 });
 
-test('crossings: the snowplow and the whale end the race like the train', () => {
-  for (const vehicle of ['plow', 'whale']) {
+test('crossings: the snowplow and the big wave end the race like the train', () => {
+  for (const vehicle of ['plow', 'bigwave']) {
     const g = emptyGame(11);
     // warned just in time for it to reach the middle of the road when the cart does
     putE(g, { kind: 'rail', vehicle, x: g.world.center(60), y: 60, state: 'idle', lead: RAIL_WARN + (g.world.halfWidth(60) + 10) / VEHICLES[vehicle].speed + 0.3 });
@@ -287,4 +288,26 @@ test('the first win on a track pays once', () => {
   assert.equal(P.firstWin('borgo'), false);
   assert.equal(P.firstWin('mare'), true);
   assert.deepEqual(TRACK_ORDER.map((id) => TRACKS[id].first), [100, 200, 300, 400, 500]);
+});
+
+test('rope bridges give way behind the cart: keep going and you are fine, stop and you fall', () => {
+  const onBridge = () => {
+    const g = createGame(12, { track: 'vulcano' });
+    g.world.ensure(2000);
+    const b = g.world.sections.find((s) => s.kind === 'bridge' && s.start > 100);
+    g.world.entities.length = 0;
+    g.world.ensure = () => {};
+    g.rollers.length = 0;
+    g.cart.y = b.start - 10; g.cart.x = g.world.center(g.cart.y); g.cart.v = 14;
+    return { g, b };
+  };
+  const a = onBridge();
+  const ev = run(a.g, 6, (gg) => ({ steer: (gg.world.center(gg.cart.y + 2) - gg.cart.x) * 0.8 }));
+  assert.ok(ev.some((e) => e.type === 'bridge'));
+  assert.ok(!ev.some((e) => e.type === 'falling'), 'rolling on, the collapse never catches up');
+  assert.ok(a.b.fallY > a.b.start);
+  const s = onBridge();
+  const ev2 = run(s.g, 6, (gg) => ({ steer: (gg.world.center(gg.cart.y + 2) - gg.cart.x) * 0.8, brake: gg.cart.y > s.b.start + 5 }));
+  assert.ok(ev2.some((e) => e.type === 'falling' && e.into === 'chasm'));
+  assert.ok(s.g.cart.y > s.b.end, 'put back after the bridge');
 });

@@ -126,7 +126,7 @@ export function play(e) {
     case 'drop': tone(420, 0.12, { type: 'triangle', vol: 0.14, slide: 0.6 }); break;
     case 'yellow': [880, 880].forEach((f, i) => tone(f, 0.12, { type: 'square', vol: 0.09, delay: i * 0.18 })); break;
     case 'bells':
-      if (e.vehicle === 'whale') { tone(110, 1.2, { type: 'sawtooth', vol: 0.16 }); tone(110, 1.2, { type: 'sawtooth', vol: 0.16, delay: 1.5 }); } // a foghorn
+      if (e.vehicle === 'bigwave') { tone(110, 1.2, { type: 'sawtooth', vol: 0.14 }); noise(2.4, { vol: 0.4, freq: 500, delay: 0.8 }); } // a foghorn, then the roar
       else if (e.vehicle === 'plow') [0, 0.5, 1.0].forEach((d) => tone(440, 0.3, { type: 'square', vol: 0.1, delay: d }));
       else for (let i = 0; i < 8; i++) tone(i % 2 ? 1180 : 1320, 0.14, { type: 'triangle', vol: 0.16, delay: i * 0.3 });
       break;

@@ -2,7 +2,7 @@
 // are made one after another as the cart gets close, each with its curve,
 // width, slope and what lies on it: things to grab (often the ones on your
 // shopping list), obstacles (some low enough to jump), people, birds, animals
-// that chase or steal, traffic lights, crossings (train, snowplow, whale), gaps
+// that chase or steal, traffic lights, crossings (train, snowplow, big wave), gaps
 // to jump, waves, geysers, coins and now and then a heart. The deeper you go,
 // the busier. Each track (src/tracks.js) picks its own mix.
 // Units are metres: x across the road, y down the road, elevation up.
@@ -234,7 +234,7 @@ export function createWorld(seed, { wanted = [], track = 'borgo' } = {}) {
       case 'pier': return { ...P, single: 2, coins: 1.1, obstacle: 1.4 + d, gap: 1.6 + d, wave: 1.1 + d, animal: animal * 0.6, thief, balloons: 0.7, none: 0.6 };
       case 'island': return { ...P, row: 1.2, obstacle: 2 + 2 * d, gate: 1.6, jump: 1.6 + d, crosser: 2 + 2 * d, crowd: 0.8 + 1.5 * d, along: 1 + d, animal, thief: thief * 0.7, pigeons: birds };
       case 'trail': return { ...P, obstacle: 2 + 2 * d, gate: 1.4, jump: 1.8 + d, gap: 1.4 + d, geyser: 1.2 + 0.6 * d, thief, balloons: 0.6, ramp: 0.5 };
-      case 'bridge': return { ...P, single: 1.5, coins: 1.6, obstacle: 0.5 + 0.5 * d, thief: thief * 0.5, none: 1 };
+      case 'bridge': return { ...P, single: 1.5, coins: 1.6, obstacle: 0.15 + 0.2 * d, thief: thief * 0.3, none: 1 };
       default: return {
         ...P, obstacle: 2 + 2 * d, gate: 2 + d, potholes: T.theme === 'alpine' ? 0 : 1.2 + d, puddle: T.theme === 'alpine' ? 0 : 1, ice: T.theme === 'alpine' ? 1 + d : 0, jump: 2 + d,
         roadworks: kind === 'street' ? 1 + d : 0, ramp: kind === 'street' ? 0.8 : 0,
@@ -285,7 +285,7 @@ export function createWorld(seed, { wanted = [], track = 'borgo' } = {}) {
     // Something that chases (or steals) when the cart goes by.
     const addChaser = (y, species) => local.push({ id: world.nextId++, kind: 'dog', species, x: center(y) + (r() < 0.5 ? -1 : 1) * (halfWidth(y) + 0.6), y, look: Math.floor(r() * 4) });
 
-    // Traffic light with a zebra crossing, or a crossing (train, snowplow, whale).
+    // Traffic light with a zebra crossing, or a crossing (train, snowplow, big wave).
     const C = T.crossing;
     if (C && C.on.includes(s.kind) && nextRail < s.end - 30 && nextRail > s.start + 25) {
       local.push({ id: world.nextId++, kind: 'rail', vehicle: C.vehicle, x: center(nextRail), y: nextRail, state: 'idle' });

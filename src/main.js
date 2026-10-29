@@ -144,7 +144,7 @@ function renderMenu() {
   $('btn-play').disabled = !open;
   $('menu-coins').textContent = String(progress.coins());
   const K = CARTS[progress.cart()];
-  $('menu-records').textContent = `${t('Cart')}: ${t(CART_NAME[progress.cart()])} · ${t('Lives')} ${K.lives}${open && i >= 2 && K.lives < 4 ? ` · ${t('Tip: a cart with more lives helps here')}` : ''}`;
+  $('menu-records').textContent = `${t('Cart')}: ${t(CART_NAME[progress.cart()])} · ${t('Lives')} ${K.lives}`;
 }
 
 function pickTrackBy(d) {
@@ -499,6 +499,7 @@ function handleEvents(g, events, live) {
     if (e.type === 'heart') toast(e.coins ? t('+{n} coins', { n: e.coins }) : t('+1 life!'), 'go');
     if (e.type === 'boost') toast(t('Turbo!'), 'go');
     if (e.type === 'skijump' || e.type === 'geyser') toast(t('Wheee!'));
+    if (e.type === 'bridge') toast(t('The bridge is giving way: don\'t slow down!'), 'warn');
     if (e.type === 'wave' && !shownTips.has('wave')) { shownTips.add('wave'); showHint(t('A wave! Jump it, or it pushes you off the pier.'), 3200); }
     if (e.type === 'stolen' && !shownTips.has('stolen')) { shownTips.add('stolen'); showHint(t('It stole the top of your pile! Keep rolling fast, or drop something for it.'), 3500); }
     if (e.type === 'roller') showHint(t('A giant snowball is rolling after you: don\'t slow down!'), 3200);

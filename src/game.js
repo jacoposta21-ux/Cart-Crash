@@ -34,6 +34,10 @@ const GLIDE_TIME = 1.5; // a balloon spent in the air: a long, slow glide
 const BOOST_TIME = 1.4; // turbo arrows
 const BOOST_SPEED = 7;
 const HEART_COINS = 25; // a heart with every life still there
+// Rope bridges give way behind the cart: the planks fall a few metres back and
+// the collapse follows at nearly the cart's usual speed. Slow down and you go with them.
+const BRIDGE_HEAD = 6; // metres between the cart and the collapse when it starts
+const BRIDGE_PACE = 0.86; // of the usual speed on the bridge
 export const JUMP_SPEED = 6.8;
 const GRAVITY = 21;
 const OIL_TIME = 3.2;
@@ -45,12 +49,13 @@ const CHECKOUT_AHEAD = 70;
 export const YELLOW_TIME = 1.4;
 export const RED_TIME = 5.0;
 // Crossings: a warning (bells, a horn), then something goes by: the train, the
-// snowplow, a whale. length and speed decide how long it takes.
+// snowplow, a big wave. length and speed decide how long it takes; reach is how far along
+// the road it sweeps (half its width).
 export const RAIL_WARN = 2.4;
 export const VEHICLES = {
-  train: { length: 58, speed: 24 },
-  plow: { length: 7, speed: 10 },
-  whale: { length: 15, speed: 14 },
+  train: { length: 58, speed: 24, reach: 1.7 },
+  plow: { length: 7, speed: 10, reach: 1.7 },
+  bigwave: { length: 6, speed: 12, reach: 3.2 },
 };
 const vehicleOf = (e) => VEHICLES[e.vehicle] || VEHICLES.train;
 /** How long the thing takes to cross the road. */
@@ -349,8 +354,10 @@ export function step(g, dt, input = 0) {
       if (loseLife(g, 'fall')) return;
       loseTop(g, 'fell');
       c.fall = 0; c.z = 0; c.vz = 0; c.vx = 0; c.oil = 0; c.glide = 0;
-      // back on solid road: past the gap, in the middle
+      // back on solid road: past the gap (or the broken bridge), in the middle
       for (const gp of w.gapsIn(c.y - 1, c.y + 1)) c.y = gp.y + gp.len + 1;
+      const under = w.sectionAt(c.y);
+      if (under.kind === 'bridge' && under.fallY !== undefined) c.y = under.end + 1;
       c.x = w.center(c.y);
       c.v = Math.min(c.v, 6);
       c.safe = SAFE_TIME;
@@ -434,6 +441,18 @@ export function step(g, dt, input = 0) {
     return;
   }
   if (SECTION[sec.kind].sway) c.x += Math.sin(g.t * 1.7 + sec.start) * 0.9 * dt; // the rope bridge swings
+  // Rope bridges collapse behind the cart.
+  if (sec.kind === 'bridge' && sec.fallY === undefined) { sec.fallY = c.y - BRIDGE_HEAD; emit(g, 'bridge', {}); }
+  for (const bs of w.sections) {
+    if (bs.kind === 'bridge' && bs.fallY !== undefined && bs.fallY < bs.end) bs.fallY = Math.min(bs.end, bs.fallY + targetSpeed(g, 'bridge') * BRIDGE_PACE * dt);
+  }
+  if (sec.kind === 'bridge' && c.z <= 0.02 && c.y - sec.fallY < 0.3) {
+    c.fall = 0.001;
+    c.vz = 0;
+    g.fellInto = 'chasm';
+    emit(g, 'falling', { into: 'chasm' });
+    return;
+  }
   if (SECTION[sec.kind].ice) c.oil = Math.max(c.oil, 0.3); // a frozen lake
   if (!w.isVoid(c.y) && Math.abs(c.x - cx) > lim) {
     const side = Math.sign(c.x - cx);
@@ -704,7 +723,7 @@ function stepRail(g, e) {
     if (!e.trainSaid && t > RAIL_WARN - 0.4) { e.trainSaid = true; emit(g, 'train', { y: e.y }); }
     if (t > RAIL_WARN + crossTime(g, e) + 1.2) e.state = 'done';
     const span = trainSpan(g, e);
-    if (span && Math.abs(c.y - e.y) < 1.7 && c.x > span.min - 0.6 && c.x < span.max + 0.6 && c.z < 2) {
+    if (span && Math.abs(c.y - e.y) < vehicleOf(e).reach && c.x > span.min - 0.6 && c.x < span.max + 0.6 && c.z < 2) {
       c.v = 0;
       g.hitBy = e.vehicle || 'train';
       gameOver(g, 'train', g.hitBy);

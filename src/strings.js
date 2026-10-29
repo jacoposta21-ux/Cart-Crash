@@ -26,6 +26,6 @@ export const CHASER_CHIP = {
 /** How a race ends when you fall (by where you fell) or something runs you over. */
 /** What each chaser says when it starts after you, and what is coming at a crossing. */
 export const CHASER_TOAST = { dog: 'Woof!', goat: 'Meeeh!', crab: 'Snap snap!', gull: 'Squawk!', monkey: 'Ooh ooh ah ah!' };
-export const CROSSING_TOAST = { train: 'Train coming: stop!', plow: 'Snowplow coming: stop!', whale: 'Whale ahead: stop!' };
+export const CROSSING_TOAST = { train: 'Train coming: stop!', plow: 'Snowplow coming: stop!', bigwave: 'Big wave coming: stop!' };
 export const FALL_TITLE = { space: 'Fell off the rainbow!', water: 'Splash! Into the sea!', lava: 'Into the lava!', chasm: 'Fell off the bridge!' };
-export const HIT_TITLE = { train: 'Hit by the train!', plow: 'Hit by the snowplow!', whale: 'Swept away by the whale!' };
+export const HIT_TITLE = { train: 'Hit by the train!', plow: 'Hit by the snowplow!', bigwave: 'Swept away by the wave!' };
