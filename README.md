@@ -120,6 +120,8 @@ In Arcade:
 - Non si perdono vite: schianti, cadute, inseguitori, treni e onde fanno
   **cadere gli oggetti**, che restano sulla strada e chiunque può raccoglierli.
 - **Urtarsi** fa solo rimbalzare i carrelli: nessuno perde niente.
+- I **ponti di corda** crollano solo dietro all'ultimo carrello: chi è davanti
+  non li rompe per chi deve ancora passare.
 - Sulla strada ci sono **monete**: quelle raccolte restano tue.
 - Un oggetto rimasto indietro rispetto a tutti ricompare più avanti, così i 7
   restano sempre in gioco.

@@ -81,3 +81,18 @@ test('the three levels: beginner rivals are slower than expert ones', () => {
   const far = (level) => { const m = createMatch(9, { track: 'borgo', level }); run(m, 25); return Math.min(...m.games.slice(1).map((g) => g.cart.y)); };
   assert.ok(far('beginner') < far('expert'));
 });
+
+test('rope bridges give way only behind the last cart', () => {
+  const m = createMatch(11, { track: 'vulcano' });
+  m.world.ensure(1500);
+  const b = m.world.sections.find((s) => s.kind === 'bridge' && s.start > 150);
+  assert.ok(b, 'a bridge');
+  const [me, ...rivals] = m.games;
+  for (const g of rivals) { g.cart.y = b.start + 2; g.cart.x = m.world.center(g.cart.y); g.cart.v = 8; }
+  me.cart.y = b.start - 120; me.cart.x = m.world.center(me.cart.y);
+  run(m, 3, () => ({ steer: 0, brake: true }));
+  assert.equal(b.fallY, undefined, 'the rivals ahead do not break it');
+  me.cart.y = b.start + 1; me.cart.x = m.world.center(me.cart.y);
+  run(m, 0.2);
+  assert.ok(b.fallY !== undefined && b.fallY < me.cart.y, 'it gives way behind me, the last one');
+});

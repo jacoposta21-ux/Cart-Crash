@@ -3,7 +3,7 @@
 // checkout: crashes, falls and chasers make things fall off the carts, and
 // whatever falls stays on the road for anyone to grab. Get all 7 and you win at
 // once; after 3 minutes, the most things wins. Coins on the road are yours to keep.
-import { createGame, step } from './game.js';
+import { createGame, step, targetSpeed, BRIDGE_HEAD, BRIDGE_PACE } from './game.js';
 import { createWorld, rng } from './world.js';
 import { catalogOf } from './catalog.js';
 import { botSteer } from './bot.js';
@@ -109,6 +109,7 @@ export function stepMatch(m, dt, input) {
   m.t += dt;
   m.games.forEach((g, i) => step(g, dt, i === 0 ? input : rivalInput(m, i)));
   bumps(m, dt);
+  collapse(m, dt);
   // A thing left far behind every cart comes back further down the road.
   const minY = Math.min(...m.games.map((g) => g.cart.y));
   const maxY = Math.max(...m.games.map((g) => g.cart.y));
@@ -123,6 +124,24 @@ export function stepMatch(m, dt, input) {
     m.overT = 0;
     m.winner = full >= 0 ? full : standings(m)[0];
     m.games[0].events.push({ type: 'vsover', t: m.games[0].t, winner: m.winner });
+  }
+}
+
+/**
+ * Rope bridges give way only behind the last cart: the ones ahead never break
+ * a bridge for those still to cross it.
+ */
+function collapse(m, dt) {
+  const last = m.games.reduce((a, g) => (g.cart.y < a.cart.y ? g : a));
+  const y = last.cart.y;
+  for (const bs of m.world.sections) {
+    if (bs.kind !== 'bridge' || bs.start > y) continue;
+    if (bs.end < y - 60) continue;
+    if (bs.fallY === undefined) {
+      if (y >= bs.end) continue;
+      bs.fallY = y - BRIDGE_HEAD;
+      for (const g of m.games) if (g.world.sectionAt(g.cart.y) === bs) g.events.push({ type: 'bridge', t: g.t });
+    } else if (bs.fallY < bs.end) bs.fallY = Math.min(bs.end, bs.fallY + targetSpeed(last, 'bridge') * BRIDGE_PACE * dt);
   }
 }
 
