@@ -1,4 +1,4 @@
-// Sound effects and a little music loop, synthesised with Web Audio (no files).
+// Sound effects and music (a calm tune on the menu, a driving one per track), synthesised with Web Audio (no files).
 // Sound and music have their own switches; the portal's mute silences both.
 import { load, save } from './storage.js';
 
@@ -9,7 +9,7 @@ let master = null, sfx = null, musicBus = null, roll = null, rollGain = null;
 let sound = load(SOUND_KEY, true) !== false;
 let music = load(MUSIC_KEY, true) !== false;
 let portalMuted = false;
-let musicOn = false, nextBeat = 0, beat = 0, timer = null;
+let musicOn = false, nextBeat = 0, beat = 0, timer = null, song = null;
 
 export const soundEnabled = () => sound;
 export const musicEnabled = () => music;
@@ -70,7 +70,7 @@ function tone(freq, dur, { type = 'square', vol = 0.18, slide = 0, delay = 0, bu
   o.start(t); o.stop(t + dur + 0.02);
 }
 
-function noise(dur, { vol = 0.3, freq = 800, delay = 0 } = {}) {
+function noise(dur, { vol = 0.3, freq = 800, delay = 0, bus = sfx } = {}) {
   if (!ctx) return;
   const t = ctx.currentTime + delay;
   const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
@@ -80,7 +80,7 @@ function noise(dur, { vol = 0.3, freq = 800, delay = 0 } = {}) {
   const src = ctx.createBufferSource(); src.buffer = buf;
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
   const g = ctx.createGain(); g.gain.value = vol;
-  src.connect(f); f.connect(g); g.connect(sfx);
+  src.connect(f); f.connect(g); g.connect(bus);
   src.start(t);
 }
 
@@ -145,30 +145,69 @@ export function play(e) {
 export function click() { tone(720, 0.05, { type: 'square', vol: 0.08 }); }
 export function record() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.18, delay: 0.3 + i * 0.09 })); }
 
-// ---- music: a bouncy two-bar loop (bass, chords, a whistled tune) ----
-const BPM = 132;
-const BASS = [45, 0, 52, 0, 45, 0, 52, 47, 43, 0, 50, 0, 43, 0, 50, 52];
-const LEAD = [69, 0, 72, 74, 76, 0, 74, 72, 71, 0, 67, 0, 69, 71, 72, 0, 69, 0, 72, 74, 76, 79, 76, 74, 72, 0, 71, 67, 69, 0, 0, 0];
+// ---- music: one loop per screen (bass, a tune and drums, in eighth notes) ----
+// kick / snare / hat: an 8-step bar, 'x' plays. lead: the tune's wave.
+const SONGS = {
+  menu: {
+    bpm: 104, lead: 'triangle', leadVol: 0.12, kick: 'x.......', snare: '........', hat: '..x...x.',
+    bass: [48, 0, 55, 0, 52, 0, 55, 0, 53, 0, 57, 0, 55, 0, 59, 0],
+    tune: [72, 0, 76, 0, 79, 0, 76, 0, 77, 0, 76, 74, 72, 0, 0, 0, 74, 0, 77, 0, 81, 0, 79, 77, 76, 0, 74, 0, 72, 0, 0, 0],
+  },
+  borgo: {
+    bpm: 136, lead: 'square', leadVol: 0.08, kick: 'x...x...', snare: '..x...x.', hat: 'xxxxxxxx',
+    bass: [45, 0, 52, 0, 45, 0, 52, 47, 43, 0, 50, 0, 43, 0, 50, 52],
+    tune: [69, 0, 72, 74, 76, 0, 74, 72, 71, 0, 67, 0, 69, 71, 72, 0, 69, 0, 72, 74, 76, 79, 76, 74, 72, 0, 71, 67, 69, 0, 0, 0],
+  },
+  montagna: {
+    bpm: 144, lead: 'square', leadVol: 0.07, kick: 'x...x...', snare: '..x...x.', hat: '.x.x.x.x',
+    bass: [50, 0, 45, 0, 50, 0, 45, 0, 55, 0, 50, 0, 57, 0, 45, 0],
+    tune: [74, 76, 78, 0, 81, 0, 78, 0, 76, 78, 79, 0, 83, 0, 79, 0, 81, 79, 78, 76, 74, 0, 78, 0, 76, 74, 73, 71, 69, 0, 0, 0],
+  },
+  mare: {
+    bpm: 140, lead: 'sawtooth', leadVol: 0.05, kick: 'x..x..x.', snare: '..x...x.', hat: 'xxxxxxxx',
+    bass: [40, 40, 40, 40, 43, 43, 45, 45, 40, 40, 40, 40, 47, 47, 45, 43],
+    tune: [64, 0, 67, 0, 71, 0, 69, 67, 64, 0, 62, 0, 64, 0, 0, 0, 64, 0, 67, 0, 71, 0, 74, 72, 71, 0, 69, 0, 67, 0, 0, 0],
+  },
+  vulcano: {
+    bpm: 152, lead: 'square', leadVol: 0.07, kick: 'x..x.x..', snare: '..x...xx', hat: 'x.xxx.xx',
+    bass: [45, 0, 45, 48, 0, 45, 52, 0, 45, 0, 45, 48, 0, 50, 52, 55],
+    tune: [69, 0, 72, 0, 76, 0, 74, 72, 69, 0, 0, 67, 69, 0, 0, 0, 76, 0, 79, 0, 81, 79, 76, 74, 72, 0, 74, 0, 69, 0, 0, 0],
+  },
+  arcobaleno: {
+    bpm: 160, lead: 'square', leadVol: 0.06, kick: 'x...x...', snare: '..x...x.', hat: '.x.x.x.x',
+    bass: [41, 41, 53, 41, 41, 53, 41, 53, 46, 46, 58, 46, 48, 48, 60, 48],
+    tune: [77, 81, 84, 81, 77, 81, 84, 89, 82, 86, 89, 86, 84, 88, 91, 88, 77, 81, 84, 81, 77, 81, 84, 89, 82, 86, 89, 91, 89, 88, 84, 0],
+  },
+};
 const midi = (n) => 440 * 2 ** ((n - 69) / 12);
 
 function schedule() {
   if (!ctx || !musicOn) return;
-  const spb = 60 / BPM / 2; // eighth notes
+  const S = SONGS[song] || SONGS.menu;
+  const spb = 60 / S.bpm / 2; // eighth notes
   while (nextBeat < ctx.currentTime + 0.25) {
     const delay = Math.max(0, nextBeat - ctx.currentTime);
-    const b = BASS[beat % BASS.length];
+    const b = S.bass[beat % S.bass.length];
     if (b) tone(midi(b), spb * 0.9, { type: 'triangle', vol: 0.5, delay, bus: musicBus });
-    const l = LEAD[beat % LEAD.length];
-    if (l) tone(midi(l), spb * 0.8, { type: 'square', vol: 0.08, delay, bus: musicBus });
-    if (beat % 2 === 0) tone(1800, 0.03, { type: 'square', vol: 0.03, delay, bus: musicBus });
+    const l = S.tune[beat % S.tune.length];
+    if (l) tone(midi(l), spb * 0.8, { type: S.lead, vol: S.leadVol, delay, bus: musicBus });
+    const step = beat % 8;
+    if (S.kick[step] === 'x') tone(150, 0.14, { type: 'sine', vol: 0.55, slide: 0.3, delay, bus: musicBus });
+    if (S.snare[step] === 'x') noise(0.1, { vol: 0.22, freq: 3200, delay, bus: musicBus });
+    if (S.hat[step] === 'x') tone(1800, 0.03, { type: 'square', vol: 0.03, delay, bus: musicBus });
     nextBeat += spb;
     beat++;
   }
 }
 
-export function startMusic() {
-  if (!ctx || musicOn) return;
+/** Plays the menu tune ('menu') or a track's (its id); switching starts the new tune at once. */
+export function startMusic(id = 'menu') {
+  if (!ctx) return;
+  if (musicOn && song === id) return;
+  if (musicOn) stopMusic();
+  song = id;
   musicOn = true;
+  beat = 0;
   nextBeat = ctx.currentTime + 0.05;
   timer = setInterval(schedule, 80);
 }

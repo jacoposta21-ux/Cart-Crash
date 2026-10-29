@@ -84,7 +84,7 @@ export function botSteer(g, skill = 1, opts = {}) {
       if (!isNeeded(g, top) || c.v < 6) out.drop = true;
     }
   }
-  // Gaps: aim for the ramp, or jump at the edge; over the gap and sinking, glide with a balloon.
+  // Gaps: aim for the ramp, or jump at the edge (with a balloon it is a super jump).
   const airborne = c.z > 0.02;
   for (let i = Math.max(0, g.next - 3); i < ents.length && ents[i].y < c.y + 14; i++) {
     const e = ents[i];
@@ -93,7 +93,6 @@ export function botSteer(g, skill = 1, opts = {}) {
       const ramp = ents.find((q) => q.type === 'ramp' && q.y < e.y && q.y > e.y - 5);
       if (ramp && tta > 0.4 && Math.abs(targetX - ramp.x) < 2.5) targetX = ramp.x;
       if (!airborne && tta > 0 && tta < 0.12) out.jump = true;
-      if (airborne && c.vz < 0 && c.y > e.y - 1 && c.y < e.y + e.len && c.z < 1.2 && c.glide <= 0) out.jump = true;
       if (tta > -0.5 && tta < 2) out.brake = false;
     }
     if (e.kind === 'wave' && e.going && !e.hit && !airborne) {

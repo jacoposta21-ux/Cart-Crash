@@ -5,7 +5,7 @@
 // track (src/tracks.js) sets the pace. Coins on the road are counted in
 // g.coins. step() is deterministic for a seed and a sequence of inputs, so
 // tests can drive whole rides.
-import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH, GOODS, LIGHT_STOP, LAUNCH } from './world.js';
+import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH, GOODS, LIGHT_STOP, RAIL_STOP, LAUNCH } from './world.js';
 import { TRACKS } from './tracks.js';
 import { catalogOf, GOODS_H } from './catalog.js';
 import { CARTS } from './carts.js';
@@ -55,8 +55,8 @@ export const RED_TIME = 5.0;
 export const RAIL_WARN = 2.4;
 export const VEHICLES = {
   train: { length: 58, speed: 24, reach: 1.7 },
-  plow: { length: 7, speed: 10, reach: 1.7 },
-  bigwave: { length: 6, speed: 12, reach: 3.2 },
+  plow: { length: 8, speed: 7, reach: 1.7 },
+  bigwave: { length: 7, speed: 8, reach: 3.2 },
 };
 const vehicleOf = (e) => VEHICLES[e.vehicle] || VEHICLES.train;
 /** How long the thing takes to cross the road. */
@@ -190,7 +190,7 @@ export function handling(g) {
   return {
     maxLat: (7.4 * g.K.steer) / (1 + 0.16 * melons),
     grip: (g.cart.oil > 0 ? 1.1 : 10 / (1 + 0.5 * melons)) * g.K.grip,
-    gravity: GRAVITY * Math.max(0.4, 1 - 0.09 * balloons) * (g.cart.glide > 0 ? 0.2 : 1),
+    gravity: GRAVITY * Math.max(0.4, 1 - 0.09 * balloons) * (g.cart.glide > 0 && g.cart.vz < 0 ? 0.25 : 1),
   };
 }
 
@@ -213,8 +213,6 @@ function loseTop(g, why, side = 0) {
   return it;
 }
 
-/** The top thing falls off (why: 'bump', 'crash'…); in versus it lands on the road. */
-export const knockOff = (g, why, side = 0) => loseTop(g, why, side);
 
 /** Versus: what falls off lands on the road a little behind and to the side, for anyone to grab. */
 function spill(g, it, side) {
@@ -274,7 +272,15 @@ function loseLife(g, why) {
   g.lives--;
   g.crashes++;
   g.cart.safe = SAFE_TIME;
-  if (g.lives <= 0) { gameOver(g, why === 'fall' ? 'fell' : 'crashes', why); return true; }
+  if (g.lives <= 0) { gameOver(g, why === 'fall' ? 'fell' : VEHICLES[why] ? 'train' : 'crashes', why); return true; }
+  return false;
+}
+
+/** A big one (a fall, a train, a wave…): a life, and everything in the cart is gone (in versus it lands on the road). */
+function wipeOut(g, why) {
+  if (g.versus) { while (g.stack.length) loseTop(g, why); g.cart.safe = SAFE_TIME; return false; }
+  if (loseLife(g, why)) return true;
+  while (g.stack.length) loseTop(g, why);
   return false;
 }
 
@@ -376,8 +382,7 @@ export function step(g, dt, input = 0) {
     c.y += c.v * 0.5 * dt;
     g.distance = c.y;
     if (c.fall > FALL_TIME) {
-      if (loseLife(g, 'fall')) return;
-      if (!g.versus) loseTop(g, 'fell');
+      if (wipeOut(g, 'fall')) return;
       c.fall = 0; c.z = 0; c.vz = 0; c.vx = 0; c.oil = 0; c.glide = 0;
       // back on solid road: past the gap (or the broken bridge), in the middle
       for (const gp of w.gapsIn(c.y - 1, c.y + 1)) c.y = gp.y + gp.len + 1;
@@ -423,15 +428,17 @@ export function step(g, dt, input = 0) {
 
   // Jumps (the player), hops (balloons) and ramps.
   if (inp.jump && !airborne) {
-    c.vz = JUMP_SPEED;
     c.z = 0.03;
-    emit(g, 'jump', {});
-  } else if (inp.jump && airborne && g.balloons.length && c.glide <= 0) {
-    // A balloon spent: glide a long way (over gaps, water, lava).
-    const b = g.balloons.pop();
-    c.glide = GLIDE_TIME;
-    c.vz = Math.max(c.vz, 2.5);
-    emit(g, 'glide', { color: b.color });
+    if (g.balloons.length) {
+      // With a balloon the jump is a super jump: higher, and a long glide down (the balloon is spent).
+      const b = g.balloons.pop();
+      c.vz = JUMP_SPEED * 1.25;
+      c.glide = GLIDE_TIME;
+      emit(g, 'glide', { color: b.color });
+    } else {
+      c.vz = JUMP_SPEED;
+      emit(g, 'jump', {});
+    }
   }
   if (c.glide > 0) c.glide = c.z > 0 ? c.glide - dt : 0;
   if (c.z > 0 || c.vz > 0) {
@@ -736,8 +743,12 @@ function stepRail(g, e) {
   const c = g.cart;
   if (e.disabled) return;
   if (e.state === 'idle') {
-    const eta = (e.y - c.y) / Math.max(c.v, 3);
-    if (eta < (e.lead ?? RAIL_WARN + 2.6) && e.y > c.y) {
+    // (a snowplow or a wave is timed on the speed the cart is about to have, not the one it has)
+    const eta = (e.y - c.y) / Math.max(c.v, 3, e.vehicle && e.vehicle !== 'train' ? targetSpeed(g, g.world.sectionAt(c.y).kind) * 0.95 : 0);
+    // The bells ring so that, rolling on, the cart gets there just as it comes by: stop at the line.
+    const V = vehicleOf(e);
+    const lead = e.vehicle && e.vehicle !== 'train' ? RAIL_WARN + (g.world.halfWidth(e.y) + 10) / V.speed + 0.15 : RAIL_WARN + 2.6;
+    if (eta < (e.lead ?? lead) && e.y > c.y) {
       e.state = 'warn';
       e.t0 = g.t;
       e.dir = g.rand() < 0.5 ? -1 : 1;
@@ -749,16 +760,15 @@ function stepRail(g, e) {
     if (!e.trainSaid && t > RAIL_WARN - 0.4) { e.trainSaid = true; emit(g, 'train', { y: e.y }); }
     if (t > RAIL_WARN + crossTime(g, e) + 1.2) e.state = 'done';
     const span = trainSpan(g, e);
-    if (span && Math.abs(c.y - e.y) < vehicleOf(e).reach && c.x > span.min - 0.6 && c.x < span.max + 0.6 && c.z < 2) {
+    if (span && c.safe <= 0 && Math.abs(c.y - e.y) < vehicleOf(e).reach && c.x > span.min - 0.6 && c.x < span.max + 0.6 && c.z < 2) {
+      // Run over: a life and the whole load, and you are thrown back behind the line.
       c.v = 0;
       g.hitBy = e.vehicle || 'train';
-      if (g.versus) {
-        // knocked flat: two things fly off, and a moment to get going again
-        if (c.safe <= 0) { loseTop(g, 'crash'); loseTop(g, 'crash'); emit(g, 'crash', { obstacle: g.hitBy, x: c.x, y: c.y, lives: g.lives }); }
-        c.safe = Math.max(c.safe, 2);
-        return;
-      }
-      gameOver(g, 'train', g.hitBy);
+      emit(g, 'crash', { obstacle: g.hitBy, x: c.x, y: c.y, lives: g.lives - 1, hit: true });
+      if (wipeOut(g, g.hitBy)) return;
+      c.y = e.y - RAIL_STOP - 0.5;
+      c.vx = 0;
+      c.safe = Math.max(c.safe, 2.5);
     }
   }
 }

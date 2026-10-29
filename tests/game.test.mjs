@@ -256,13 +256,16 @@ test('balloons can be let go one at a time', () => {
   assert.equal(g.balloons.length, 1);
 });
 
-test('the train ends the ride; waiting at the barrier is safe', () => {
+test('the train costs a life and the whole load; waiting at the barrier is safe', () => {
   const a = emptyGame(), b = emptyGame();
   for (const g of [a, b]) put(g, { kind: 'rail', x: 0, y: 110, state: 'idle' });
+  add(a, { type: 'goods', goods: 'bread' }); add(a, { type: 'goods', goods: 'soda' });
   const evA = run(a, 15);
   assert.ok(evA.some((e) => e.type === 'bells'));
-  assert.equal(a.over, true);
-  assert.equal(a.reason, 'train');
+  assert.equal(a.over, false);
+  assert.equal(a.lives, 2);
+  assert.equal(a.stack.length, 0);
+  assert.equal(a.hitBy, 'train');
   run(b, 18, (g) => ({ steer: 0, brake: botSteer(g).brake }));
   assert.equal(b.over, false);
   assert.ok(b.cart.y > 120);
@@ -278,7 +281,7 @@ test('watermelons make the steering slower', () => {
   assert.ok(heavy.cart.x - x1 < (plain.cart.x - x0) * 0.8);
 });
 
-test('a balloon spent in the air makes a long glide; in the air a pothole does nothing', () => {
+test('with a balloon the jump is a super jump (the balloon is spent); in the air a pothole does nothing', () => {
   // compare how long the cart stays up, with and without a balloon spent at the top
   const air = (balloons) => {
     const g = emptyGame();

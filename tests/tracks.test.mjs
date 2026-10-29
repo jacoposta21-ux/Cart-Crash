@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, step, drainEvents, handling, targetSpeed, VEHICLES, RAIL_WARN } from '../src/game.js';
+import { createGame, step, drainEvents, handling, targetSpeed } from '../src/game.js';
 import { botSteer } from '../src/bot.js';
 import { TRACKS, TRACK_ORDER } from '../src/tracks.js';
 import { CARTS } from '../src/carts.js';
@@ -272,13 +272,21 @@ test('a fast cart shakes off chasers sooner, a slow one later', () => {
   assert.ok(time('iron') > time('classic'));
 });
 
-test('crossings: the snowplow and the big wave end the race like the train', () => {
+test('crossings: the snowplow and the big wave come just as you get there; hit, a life and the whole load', () => {
   for (const vehicle of ['plow', 'bigwave']) {
     const g = emptyGame(11);
-    // warned just in time for it to reach the middle of the road when the cart does
-    putE(g, { kind: 'rail', vehicle, x: g.world.center(60), y: 60, state: 'idle', lead: RAIL_WARN + (g.world.halfWidth(60) + 10) / VEHICLES[vehicle].speed + 0.3 });
-    run(g, 12, (gg) => ({ ...middle(gg), brake: false }));
-    assert.ok(g.over && g.reason === 'train' && g.hitBy === vehicle, vehicle);
+    g.stack.push({ type: 'goods', goods: 'bread', h: 0.34, id: 1 });
+    putE(g, { kind: 'rail', vehicle, x: g.world.center(60), y: 60, state: 'idle' });
+    const ev = run(g, 12, middle);
+    assert.ok(ev.some((e) => e.type === 'bells'), vehicle);
+    assert.equal(g.hitBy, vehicle, `${vehicle}: rolling on, it gets you`);
+    assert.ok(!g.over && g.lives === 2 && g.stack.length === 0, vehicle);
+    // braking at the line, it goes by in front
+    const h = emptyGame(11);
+    putE(h, { kind: 'rail', vehicle, x: h.world.center(60), y: 60, state: 'idle' });
+    run(h, 14, (gg) => ({ ...middle(gg), brake: botSteer(gg).brake }));
+    assert.equal(h.lives, 3, `${vehicle}: waiting is safe`);
+    assert.ok(h.cart.y > 70);
   }
 });
 

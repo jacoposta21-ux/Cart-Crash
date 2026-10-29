@@ -98,7 +98,7 @@ export const RAIL_STOP = 5;
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 /** wanted: keys of the things on the shopping list ('melon', 'eggs', 'oil' or a GOODS name). track: a TRACKS id. */
-/** versus: no shopping on the road (the 7 things of the race are placed by src/versus.js), no coins, no hearts. */
+/** versus: no shopping on the road (the 7 things of the race are placed by src/versus.js) and no hearts; coins stay. */
 export function createWorld(seed, { wanted = [], track = 'borgo', versus = false } = {}) {
   const T = trackOf(track);
   const shop = catalogOf(track).goods;
@@ -276,7 +276,7 @@ export function createWorld(seed, { wanted = [], track = 'borgo', versus = false
       if (e) e.x = center(y) + side * (halfWidth(y) + 1.2);
       return e;
     };
-    const addCoin = (x, y, h = 0) => { if (!versus) local.push({ id: world.nextId++, kind: 'coin', x, y, h }); };
+    const addCoin = (x, y, h = 0) => local.push({ id: world.nextId++, kind: 'coin', x, y, h });
     // A line of coins to follow (curving a little).
     const addCoins = (y, off, n = 5) => {
       const drift = range(-0.35, 0.35);
@@ -309,7 +309,7 @@ export function createWorld(seed, { wanted = [], track = 'borgo', versus = false
       const lim = halfWidth(y) - 0.7;
       const u = () => range(-lim, lim);
       let pattern = pick(patterns(s.kind, d, y < 60));
-      if (versus && ['single', 'row', 'trail', 'coins', 'heart'].includes(pattern)) pattern = 'none';
+      if (versus && ['single', 'row', 'trail', 'heart'].includes(pattern)) pattern = 'none';
 
       switch (pattern) {
         case 'single': addItem(y, u()); break;

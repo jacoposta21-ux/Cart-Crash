@@ -18,11 +18,11 @@ export const THING_NAME = {
   meteor: 'Meteorite', jelly: 'Cosmic jelly', crystals: 'Star crystals',
   rainbowcandy: 'Rainbow sweets', cupcake: 'Cupcake', lollipop: 'Lollipop', cottoncandy: 'Candy floss', starcookie: 'Star cookies', cosmicmilk: 'Cosmic milk', spacesoda: 'Space soda', donut: 'Doughnut',
 };
-export const ITEM_EFFECT = { melon: 'Heavy: slow to steer', balloon: 'Jump twice to glide', oil: 'Slippery for a while', goods: 'The pile wobbles', eggs: 'Break on bumps' };
+export const ITEM_EFFECT = { melon: 'Heavy: slow to steer', balloon: 'Next jump is a super jump', oil: 'Slippery for a while', goods: 'The pile wobbles', eggs: 'Break on bumps' };
 export const LEGEND = ['melon', 'balloon', 'oil', 'eggs'];
 export const TIPS = {
   melon: '{item}! The cart is heavier and slower to steer.',
-  balloon: 'Balloons! Jump, then jump again in the air: you glide a long way. They do not count as extras.',
+  balloon: 'Balloons! Your next jump becomes a super jump, then the balloon is gone. They do not count as extras.',
   oil: '{item}! Slippery for a few seconds.',
   eggs: '{item}! It breaks on hard bumps.',
   goods: 'Steer gently: the pile sways and things fall off.',

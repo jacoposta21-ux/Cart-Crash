@@ -1,9 +1,9 @@
-// Versus: a race on one track against 1 or 2 rivals (driven by the computer for
-// now) for 7 things placed on the road. Nobody loses lives and there is no
-// checkout: crashes, falls, chasers and bumping into each other make things fall
-// off the carts, and whatever falls stays on the road for anyone to grab. Get
-// all 7 and you win at once; after 3 minutes, the most things wins.
-import { createGame, step, knockOff } from './game.js';
+// Arcade: a race on one track against 2 rivals (driven by the computer, at three
+// levels) for 7 things placed on the road. Nobody loses lives and there is no
+// checkout: crashes, falls and chasers make things fall off the carts, and
+// whatever falls stays on the road for anyone to grab. Get all 7 and you win at
+// once; after 3 minutes, the most things wins. Coins on the road are yours to keep.
+import { createGame, step } from './game.js';
 import { createWorld, rng } from './world.js';
 import { catalogOf } from './catalog.js';
 import { botSteer } from './bot.js';
@@ -11,17 +11,25 @@ import { botSteer } from './bot.js';
 export const VS_THINGS = 7;
 export const VS_TIME = 180;
 const BUMP_COOLDOWN = 1.2;
+/** How the rivals drive: steadiness at the wheel, a little speed, how far they look and how keen they are to bump you. */
+export const LEVELS = {
+  beginner: { skill: 0.65, speed: -1.2, reach: 9, bump: 0 },
+  normal: { skill: 0.88, speed: 0, reach: 13, bump: 0.5 },
+  expert: { skill: 1, speed: 0.9, reach: 18, bump: 1 },
+};
 const NAMES = ['Luca', 'Sara', 'Leo', 'Mia', 'Tom', 'Zoe', 'Max', 'Ana', 'Kai', 'Eva', 'Nico', 'Lina'];
 export const RIVAL_COLORS = ['#3a86ff', '#8338ec', '#06d6a0', '#ff006e'];
 
 /** A new match: the player's game first, then the rivals'. All share one road. */
-export function createMatch(seed, { track = 'borgo', cart = 'classic', rivals = 1 + (seed % 2) } = {}) {
+export function createMatch(seed, { track = 'borgo', cart = 'classic', rivals = 2, level = 'normal' } = {}) {
+  const L = LEVELS[level] || LEVELS.normal;
   const r = rng(seed ^ 0x7e57);
   const world = createWorld(seed, { track, versus: true });
   world.prune = () => 0; // the road behind the last cart is still needed
   const games = [];
   for (let i = 0; i <= rivals; i++) {
     const g = createGame(seed + i, { track, cart, versus: true, world });
+    if (i > 0) g.K = { ...g.K, speed: g.K.speed + L.speed }; // the rivals' pace, by level
     g.cart.x = world.center(0) + (i === 0 ? 0 : i === 1 ? -1.4 : 1.4);
     g.cart.y = i === 0 ? 0 : -0.8;
     games.push(g);
@@ -31,7 +39,7 @@ export function createMatch(seed, { track = 'borgo', cart = 'classic', rivals = 
   for (let i = 0; i < rivals; i++) names.push(pool.splice(Math.floor(r() * pool.length), 1)[0]);
   const m = {
     seed, track, world, games, names, colors: RIVAL_COLORS.slice(0, rivals),
-    skill: names.map(() => 0.82 + r() * 0.16), t: 0, over: false, winner: null, bumpCd: new Map(), rand: r,
+    level, L, skill: names.map(() => L.skill - r() * 0.06), t: 0, over: false, winner: null, bumpCd: new Map(), rand: r,
   };
   // The 7 things: 7 of the track's groceries, ahead on the road.
   const shop = [...catalogOf(track).goods];
@@ -76,11 +84,21 @@ export function rivalInput(m, i) {
   const g = m.games[i];
   const c = g.cart;
   let target;
-  let bestD = 14;
-  for (const o of m.games) {
-    if (o === g || !o.stack.length) continue;
-    const d = o.cart.y - c.y;
-    if (d > 0.5 && d < bestD && Math.abs(o.cart.x - c.x) < 4) { bestD = d; target = o.cart.x; }
+  // the nearest thing to grab, as far as this level looks
+  let bestD = m.L.reach;
+  for (let k = g.next; k < g.world.entities.length; k++) {
+    const e = g.world.entities[k];
+    const d = e.y - c.y;
+    if (d > m.L.reach) break;
+    if (e.vs && !e.taken && d > 1 && d < bestD) { bestD = d; target = e.x; }
+  }
+  // or a cart ahead with things on board, to get in its way
+  if (target === undefined && m.L.bump) {
+    for (const o of m.games) {
+      if (o === g || !o.stack.length) continue;
+      const d = o.cart.y - c.y;
+      if (d > 0.5 && d < 12 * m.L.bump && Math.abs(o.cart.x - c.x) < 4) target = o.cart.x;
+    }
   }
   return botSteer(g, m.skill[i - 1] ?? 0.9, { target });
 }
@@ -108,7 +126,7 @@ export function stepMatch(m, dt, input) {
   }
 }
 
-/** Carts that run into each other: both lose the top thing and bounce apart. */
+/** Carts that run into each other bounce apart (nothing falls off). */
 function bumps(m, dt) {
   for (const [k, v] of m.bumpCd) { if (v - dt <= 0) m.bumpCd.delete(k); else m.bumpCd.set(k, v - dt); }
   const G = m.games;
@@ -121,10 +139,7 @@ function bumps(m, dt) {
       m.bumpCd.set(key, BUMP_COOLDOWN);
       const side = Math.sign(ca.x - cb.x) || 1;
       ca.vx = side * 4.5; cb.vx = -side * 4.5;
-      for (const [g, sd] of [[G[a], side], [G[b], -side]]) {
-        g.events.push({ type: 'vsbump', t: g.t, other: g === G[a] ? b : a });
-        if (g.stack.length) knockOff(g, 'bump', sd);
-      }
+      for (const g of [G[a], G[b]]) g.events.push({ type: 'vsbump', t: g.t, other: g === G[a] ? b : a });
     }
   }
 }

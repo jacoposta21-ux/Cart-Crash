@@ -21,6 +21,7 @@ const DT = 1 / 120;
 
 const SHAKE_KEY = 'cartcrash:shake';
 const RIDES_KEY = 'cartcrash:rides';
+const LEVEL_KEY = 'cartcrash:level'; // the Arcade rivals' level
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -77,7 +78,7 @@ function readInput() {
 const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowDown: 'brake', KeyS: 'brake' };
 window.addEventListener('keydown', (e) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code) && mode === 'play') e.preventDefault();
-  if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; audio.unlock(); }
+  if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; wakeAudio(); }
   if (mode === 'play' && !e.repeat) {
     if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Space') pressed.jump = true;
     if (e.code === 'KeyE' || e.code === 'KeyX') pressed.drop = true;
@@ -93,7 +94,7 @@ window.addEventListener('keyup', (e) => { if (KEYMAP[e.code]) keys[KEYMAP[e.code
 const SWIPE = 40;
 const sideOf = (x) => (x < window.innerWidth / 2 ? -1 : 1);
 canvas.addEventListener('pointerdown', (e) => {
-  audio.unlock();
+  wakeAudio();
   if (mode !== 'play') return;
   pointers.set(e.pointerId, { x0: e.clientX, y0: e.clientY, side: sideOf(e.clientX), brake: false, jumped: false });
   try { canvas.setPointerCapture(e.pointerId); } catch { /* optional */ }
@@ -149,8 +150,7 @@ function renderMenu() {
   $('btn-play').disabled = !open;
   $('btn-versus').disabled = !open;
   $('menu-coins').textContent = String(progress.coins());
-  const K = CARTS[progress.cart()];
-  $('menu-records').textContent = `${t('Cart')}: ${t(CART_NAME[progress.cart()])} · ${t('Lives')} ${K.lives}`;
+
 }
 
 function pickTrackBy(d) {
@@ -257,11 +257,18 @@ function goMenu() {
   audio.rolling(0, false);
   game = null;
   match = null;
+  audio.startMusic('menu');
   document.documentElement.classList.remove('versus');
   pickTrack = progress.track();
   newDemo();
   renderMenu();
   show('screen-menu');
+}
+
+/** The first tap or key unlocks the sound: on the menu, its tune starts. */
+function wakeAudio() {
+  audio.unlock();
+  if (mode === 'menu') audio.startMusic('menu');
 }
 
 /** A new race on this track (the chosen one by default) with the cart in use. versus: against rivals for 7 things. */
@@ -270,7 +277,7 @@ function start(track = progress.track(), versus = false) {
   bankCoins();
   const seed = TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0;
   const tr = TEST && params.get('track') ? params.get('track') : track;
-  match = versus ? createMatch(seed, { track: tr, cart: progress.cart(), rivals: TEST && params.get('rivals') ? Number(params.get('rivals')) : 1 + (seed % 2) }) : null;
+  match = versus ? createMatch(seed, { track: tr, cart: progress.cart(), level: load(LEVEL_KEY, 'normal') }) : null;
   game = match ? match.games[0] : createGame(seed, { track: tr, cart: progress.cart() });
   banked = 0;
   setGame(R, game);
@@ -284,13 +291,13 @@ function start(track = progress.track(), versus = false) {
   show(null);
   buildList();
   updateHud(true);
-  if (match) showHint(t('Grab the {n} things! Bump into the others to make them drop theirs. All {n} wins at once; after 3 minutes, the most wins.', { n: VS_THINGS }), 5000);
+  if (match) showHint(t('You and 2 rivals, 7 things on the road. Get all 7 to win at once; after 3 minutes, the most wins. Crashes and falls knock things off: grab them!'), 5000);
   else if (game.T.roller === 'boulder') showHint(t('A boulder is rolling after you: never stop!'), 3500);
   else showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop · Q balloon'), 3500);
   portal.gameplay(true);
-  audio.startMusic();
+  audio.startMusic(game.track);
   saveProgress(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
-  if (match) toast(t('Versus: {names}', { names: match.names.join(' · ') }));
+  if (match) toast(t('Rivals: {names}', { names: match.names.join(' · ') }));
 }
 
 function pause() {
@@ -311,7 +318,7 @@ function resume() {
   show(null);
   lastTime = performance.now();
   portal.gameplay(true);
-  audio.startMusic();
+  audio.startMusic(game.track);
 }
 
 let firstReward = 0;
@@ -489,7 +496,7 @@ function updateHud(force) {
   if (cop !== null) { const c = document.createElement('span'); c.className = 'chip warn cop'; c.textContent = t('Police {n} m behind: don\'t slow down!', { n: cop }); chips.push(c); }
   if (nExtra) { const c = document.createElement('span'); c.className = 'chip extra'; c.textContent = t('Extras: {n} (+{s}s)', { n: nExtra, s: nExtra * EXTRA_PENALTY }); chips.push(c); }
   if (melons) chips.push(chip('melon', `${t('Heavy')} ×${melons}`));
-  if (balloons) chips.push(chip('balloon', `${t('Glide')} ×${balloons}`));
+  if (balloons) chips.push(chip('balloon', `${t('Super jump')} ×${balloons}`));
   if (oil) chips.push(chip('oil', `${t('Slippery')} ${oil}s`, true));
   if (wobbly) chips.push(chip('goods', t('Wobbly!'), true));
   $('hud-chips').replaceChildren(...chips);
@@ -562,7 +569,7 @@ function handleEvents(g, events, live) {
     if (e.type === 'wave' && !shownTips.has('wave')) { shownTips.add('wave'); showHint(t('A wave! Jump it, or it pushes you off the pier.'), 3200); }
     if (e.type === 'stolen' && !shownTips.has('stolen')) { shownTips.add('stolen'); showHint(t('It stole the top of your pile! Keep rolling fast, or drop something for it.'), 3500); }
     if (e.type === 'roller') showHint(t('A giant snowball is rolling after you: don\'t slow down!'), 3200);
-    if (e.type === 'glide' && !shownTips.has('glide')) { shownTips.add('glide'); toast(t('Gliding!'), 'go'); }
+    if (e.type === 'glide' && !shownTips.has('glide')) { shownTips.add('glide'); toast(t('Super jump!'), 'go'); }
     if (e.type === 'respawn' && !match) showHint(e.lives === 1 ? t('Careful: one more crash and you are out!') : game.fellInto === 'space' ? t('Stay on the rainbow: off the edge costs a life!') : t('Off the edge costs a life!'), 2500);
   }
 }
@@ -668,9 +675,12 @@ function translatePage() {
 }
 
 function wire() {
-  const on = (id, fn) => $(id).addEventListener('click', () => { audio.unlock(); audio.click(); fn(); });
+  const on = (id, fn) => $(id).addEventListener('click', () => { wakeAudio(); audio.click(); fn(); });
   on('btn-play', () => { if (progress.isOpen(pickTrack)) { progress.selectTrack(pickTrack); start(pickTrack); } });
-  on('btn-versus', () => { if (progress.isOpen(pickTrack)) { progress.selectTrack(pickTrack); start(pickTrack, true); } });
+  // Arcade: pick the rivals' level, then go.
+  on('btn-versus', () => { if (progress.isOpen(pickTrack)) { const lv = load(LEVEL_KEY, 'normal'); for (const b of document.querySelectorAll('.level-btn')) { b.classList.toggle('btn-primary', b.dataset.level === lv); b.classList.toggle('btn-secondary', b.dataset.level !== lv); } openScreen('screen-arcade'); } });
+  for (const b of document.querySelectorAll('.level-btn')) on(b.id, () => { save(LEVEL_KEY, b.dataset.level); progress.selectTrack(pickTrack); start(pickTrack, true); });
+  on('btn-arcade-back', () => openScreen('screen-menu'));
   on('btn-again', () => afterRide(() => start(game.track, Boolean(match))));
   on('btn-menu', () => afterRide(goMenu));
   on('btn-pause', pause);

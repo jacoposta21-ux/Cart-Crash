@@ -12,13 +12,14 @@ const run = (m, seconds, input = { steer: 0 }) => {
 };
 const total = (m) => scores(m).reduce((a, b) => a + b, 0) + m.world.entities.filter((e) => e.vs && !e.taken).length;
 
-test('a match: 2 or 3 carts on one road, 7 things on it, no shopping, no coins', () => {
-  const m = createMatch(4, { track: 'borgo', rivals: 2 });
+test('a match: 3 carts on one road, 7 things on it, no shopping, coins to pick up', () => {
+  const m = createMatch(4, { track: 'borgo' });
   assert.equal(m.games.length, 3);
   assert.ok(m.games.every((g) => g.world === m.world && g.versus && g.list.length === 0));
   assert.equal(total(m), VS_THINGS);
   m.world.ensure(800);
-  assert.ok(!m.world.entities.some((e) => e.kind === 'coin' || e.kind === 'heart' || (e.kind === 'item' && !e.vs && e.type !== 'balloon')));
+  assert.ok(!m.world.entities.some((e) => e.kind === 'heart' || (e.kind === 'item' && !e.vs && e.type !== 'balloon')));
+  assert.ok(m.world.entities.some((e) => e.kind === 'coin'));
   assert.equal(createMatch(5, { rivals: 1 }).games.length, 2);
 });
 
@@ -32,7 +33,7 @@ test('on every track the 7 things stay 7 (in carts or on the road) and nobody lo
   }
 });
 
-test('bumping into a rival: both lose the top thing, and it stays on the road', () => {
+test('bumping into a rival: you bounce apart, nobody loses anything', () => {
   const m = createMatch(6, { track: 'borgo', rivals: 1 });
   const [a, b] = m.games;
   m.world.entities = m.world.entities.filter((e) => !e.vs);
@@ -40,9 +41,9 @@ test('bumping into a rival: both lose the top thing, and it stays on the road', 
   b.cart.x = a.cart.x + 0.5; b.cart.y = a.cart.y;
   const ev = run(m, 0.05);
   assert.ok(ev.some((e) => e.type === 'vsbump'));
-  assert.equal(a.stack.length, 0);
-  assert.equal(b.stack.length, 0);
-  assert.equal(m.world.entities.filter((e) => e.vs && !e.taken).length, 2);
+  assert.equal(a.stack.length, 1);
+  assert.equal(b.stack.length, 1);
+  assert.ok(Math.abs(b.cart.x - a.cart.x) > 0.5);
 });
 
 test('a crash or a fall knocks a thing off, it does not cost a life', () => {
@@ -74,4 +75,9 @@ test('things left behind every cart come back further down the road', () => {
   for (const g of m.games) g.cart.y = e.y + 30;
   run(m, 0.1);
   assert.ok(e.y > m.games[0].cart.y + 40, `${e.y}`);
+});
+
+test('the three levels: beginner rivals are slower than expert ones', () => {
+  const far = (level) => { const m = createMatch(9, { track: 'borgo', level }); run(m, 25); return Math.min(...m.games.slice(1).map((g) => g.cart.y)); };
+  assert.ok(far('beginner') < far('expert'));
 });

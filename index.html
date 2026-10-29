@@ -53,28 +53,38 @@
   <section id="screen-menu" class="screen screen-menu" aria-labelledby="title" hidden>
     <div class="menu-card">
       <h1 id="title" class="logo"><img src="assets/logo.webp" alt="Cart Crash" width="544" height="572"></h1>
-      <p class="tagline" data-i18n="Race a shopping cart down the hill: grab what is on your list and reach the checkout first.">Race a shopping cart down the hill: grab what is on your list and reach the checkout first.</p>
       <div class="picker track-picker">
         <button id="track-prev" class="icon-btn arrow" type="button" aria-label="Previous track" data-i18n-label="Previous track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 4 7.5 12l8 8"/></svg></button>
         <div id="track-card" class="pick-card"><b id="track-name"></b><span id="track-info"></span></div>
         <button id="track-next" class="icon-btn arrow" type="button" aria-label="Next track" data-i18n-label="Next track"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 4l8 8-8 8"/></svg></button>
       </div>
-      <div class="row play-row">
-        <button id="btn-play" class="btn btn-primary btn-big" type="button" data-i18n="Play">Play</button>
-        <button id="btn-versus" class="btn btn-secondary versus-btn" type="button"><span data-i18n="Versus">Versus</span><small data-i18n="vs computer">vs computer</small></button>
+      <div class="row mode-row">
+        <button id="btn-play" class="btn btn-primary btn-big mode-btn" type="button"><span data-i18n="Classic">Classic</span><small data-i18n="Your list, against the clock">Your list, against the clock</small></button>
+        <button id="btn-versus" class="btn btn-secondary btn-big mode-btn" type="button"><span data-i18n="Arcade">Arcade</span><small data-i18n="3 carts, 7 things">3 carts, 7 things</small></button>
       </div>
-      <div class="row menu-row">
-        <button id="btn-garage" class="btn btn-secondary" type="button"><span data-i18n="Garage">Garage</span><span id="menu-coins" class="coin-pill"></span></button>
-        <button id="btn-help" class="btn btn-ghost" type="button" data-i18n="How to play">How to play</button>
-      </div>
-      <p id="menu-records" class="records"></p>
       <div class="menu-foot">
+        <button id="btn-garage" class="btn btn-ghost garage-btn" type="button" aria-label="Garage" data-i18n-label="Garage">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 4h3l2.4 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.4-1.1L21 8H6.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9.5" cy="19.5" r="1.6"/><circle cx="17" cy="19.5" r="1.6"/></svg>
+          <span id="menu-coins" class="coin-pill"></span>
+        </button>
+        <button id="btn-help" class="icon-btn" type="button" aria-label="How to play" data-i18n-label="How to play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1.2 15.6h-2.4v-2.4h2.4zm2.3-7.4c-.4.6-1 1-1.5 1.4-.6.4-.8.7-.8 1.6h-2.4c0-1.6.6-2.3 1.4-2.9.6-.4 1.1-.7 1.1-1.4 0-.7-.6-1.2-1.3-1.2-.8 0-1.4.5-1.5 1.4L8.3 8.8C8.6 6.9 10.1 5.8 12 5.8c2.2 0 3.8 1.3 3.8 3.1 0 .5-.1.9-.3 1.3z"/></svg></button>
         <button id="btn-settings" class="icon-btn" type="button" aria-label="Settings" data-i18n-label="Settings">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>
         </button>
         <button class="icon-btn" type="button" data-sound-toggle aria-label="Mute"></button>
-        <a class="foot-link" href="privacy.html" data-i18n="Privacy">Privacy</a>
       </div>
+      <a class="foot-link small-link" href="privacy.html" data-i18n="Privacy">Privacy</a>
+    </div>
+  </section>
+
+  <section id="screen-arcade" class="screen" aria-labelledby="arcade-title" hidden>
+    <div class="card card-arcade">
+      <h2 id="arcade-title" data-i18n="Arcade">Arcade</h2>
+      <p class="arcade-rules" data-i18n="You and 2 rivals, 7 things on the road. Get all 7 to win at once; after 3 minutes, the most wins. Crashes and falls knock things off: grab them!">You and 2 rivals, 7 things on the road. Get all 7 to win at once; after 3 minutes, the most wins. Crashes and falls knock things off: grab them!</p>
+      <button id="lvl-beginner" class="btn btn-secondary level-btn" type="button" data-level="beginner"><span data-i18n="Beginner">Beginner</span></button>
+      <button id="lvl-normal" class="btn btn-primary level-btn" type="button" data-level="normal"><span data-i18n="Normal">Normal</span></button>
+      <button id="lvl-expert" class="btn btn-secondary level-btn" type="button" data-level="expert"><span data-i18n="Expert">Expert</span></button>
+      <button id="btn-arcade-back" class="btn btn-ghost" type="button" data-i18n="Back">Back</button>
     </div>
   </section>
 

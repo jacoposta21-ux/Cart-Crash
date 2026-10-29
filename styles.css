@@ -140,11 +140,17 @@ html, body {
 .cart-stats .lives { display: flex; gap: 3px; }
 .card-help { width: min(520px, 100%); }
 
-/* versus */
-.play-row { flex-wrap: nowrap; align-items: stretch; }
-.play-row .btn-big { flex: 2 1 0; }
-.versus-btn { flex: 1 1 0; min-width: 0; padding: 6px 10px; font-size: 1.05rem; }
-.versus-btn small { font-family: var(--body); font-weight: 800; font-size: 0.72rem; letter-spacing: 0; opacity: 0.8; }
+/* menu: the two modes, then a row of icons */
+.mode-row { flex-wrap: nowrap; align-items: stretch; gap: 10px; }
+.mode-btn { flex: 1 1 0; min-width: 0; padding: 10px 8px; gap: 3px; }
+.mode-btn span { font-size: clamp(1.35rem, 3.4vh, 1.7rem); }
+.mode-btn small { font-family: var(--body); font-weight: 800; font-size: 0.74rem; letter-spacing: 0; opacity: 0.9; line-height: 1.15; }
+.garage-btn { flex-direction: row; gap: 8px; min-height: 48px; padding: 6px 12px 6px 10px; font-size: 1rem; }
+.garage-btn svg { width: 26px; height: 26px; fill: currentColor; }
+.small-link { min-height: 44px; margin: -6px 0; font-size: 0.8rem; color: var(--ink-2); align-self: center; }
+.card-arcade { width: min(400px, 100%); }
+.arcade-rules { margin: 0; font-weight: 800; font-size: 0.92rem; color: var(--ink-2); }
+.level-btn { min-height: 52px; }
 .vs-board { display: none; list-style: none; margin: 0; padding: 4px 6px; flex-direction: column; gap: 3px; background: rgba(29, 35, 64, 0.85); border-radius: 12px; color: #fff; font-weight: 800; font-size: 0.85rem; min-width: 128px; }
 .vs-board li { display: flex; align-items: center; gap: 6px; }
 .vs-board li::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
@@ -258,11 +264,15 @@ html, body {
 @media (max-height: 500px) {
   .tagline, .controls-help, .rules { display: none; }
   .menu-card { width: min(720px, 100%); display: grid; grid-template-columns: 1fr 1fr; align-items: center; column-gap: 18px; }
-  .menu-card .logo { grid-row: 1 / span 4; grid-column: 1; }
-  .menu-card .logo img { height: min(38vh, 150px); }
-  .menu-card > :not(.logo, .menu-foot) { grid-column: 2; }
+  .menu-card .logo { grid-row: 1 / span 3; grid-column: 1; }
+  .menu-card .logo img { height: min(46vh, 170px); }
+  .menu-card > :not(.logo) { grid-column: 2; }
+  .menu-card .small-link { grid-column: 1; grid-row: 4; }
+  .card-arcade { width: min(640px, 100%); display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 12px 18px; }
+  .card-arcade h2, .card-arcade .arcade-rules, #btn-arcade-back { grid-column: 1 / -1; }
+  .card-arcade h2 { font-size: 1.5rem; }
+  .card-arcade .btn { min-height: 44px; }
   .legend { grid-column: 1 / -1; }
-  .menu-foot { grid-column: 1 / -1; }
   .score { font-size: 2.6rem; }
   .card-end { width: min(620px, 100%); }
   #screen-settings .card { width: min(640px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; padding: 12px 18px; }

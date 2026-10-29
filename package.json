@@ -1,6 +1,6 @@
 {
   "name": "cart-crash",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Cart Crash: ride a shopping cart down an endless hilly town in 3D. Everything you grab piles up in the cart and changes how you steer.",
   "private": true,
   "type": "module",

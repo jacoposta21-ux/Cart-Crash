@@ -29,17 +29,20 @@ più breve.
   alla cassa (cose fuori lista o in più del richiesto; i palloncini non
   contano). Con **Molla** butti l'oggetto in cima prima della cassa e non lo
   paghi. Il record (punteggio più basso) resta sul dispositivo.
-- **Sei fuori** al terzo schianto (cassonetti, casse, coni, motorini,
-  dissuasori, transenne, panchine, tubi, passanti) o se ti prende il **treno**.
+- **Sei fuori** quando finisci le vite: ogni schianto (cassonetti, casse,
+  coni, motorini, dissuasori, transenne, panchine, tubi, passanti) ne costa una.
   Dopo uno schianto hai 1,6 s di tregua.
+- **Treno, spazzaneve, onda gigante e cadute** (in acqua, nella lava, giù
+  dall'arcobaleno): non sei fuori, ma perdi **una vita e tutto il carico**.
 - **Semafori**: quando ti avvicini diventano gialli e poi rossi, e una folla
   attraversa sulle strisce. Se col rosso **vai addosso a qualcuno**, quella
   persona vola via e ti cade **tutto** il carico (non perdi vite, ma devi
   riprendere la spesa). In ogni caso, se passi col rosso ti insegue un
   **vigile** per 10 secondi: ti prende solo se rallenti, e la multa costa una
   vita. Frena e aspetta il verde.
-- **Passaggi a livello**: campanella, sbarre giù, poi passa il treno. Se sei sui
-  binari mentre passa, la gara è finita. Fermati alla linea.
+- **Passaggi a livello**: campanella, sbarre giù, poi passa il treno (in
+  Montagna lo spazzaneve, al Mare l'onda gigante), tarato per arrivare proprio
+  quando arrivi tu. Fermati alla linea e aspetta che passi.
 - **Cani e vigile** corrono accanto al carrello, appena dietro, sempre
   inquadrati (la visuale si allarga mentre ti inseguono). Il cane compare a caso
   lungo la strada.
@@ -53,7 +56,7 @@ più breve.
 | Oggetto | Effetto |
 |---|---|
 | Anguria | pesa: il carrello sterza più lento e scende più veloce |
-| Palloncini | alleggeriscono: piccoli salti che scavalcano buche e pozzanghere; non sono mai in lista e non contano come extra; si liberano con Q / **Libera** |
+| Palloncini | il prossimo salto diventa un **super salto** (più alto e lungo), poi il palloncino sparisce; non sono mai in lista e non contano come extra; si liberano con Q / **Libera** |
 | Olio d'oliva | scivoli per circa 3 s; anche le pozzanghere d'olio fanno scivolare |
 | Spesa varia (cereali, carta igienica, pomodori, pane, formaggio, bibita, ananas, detersivo) | la pila cresce, ondeggia quando sterzi e se pende troppo l'oggetto in cima cade |
 | Uova | si rompono sui colpi forti (buche, atterraggi, schianti) |
@@ -84,8 +87,8 @@ Ognuna aggiunge qualcosa di suo:
   Alla cassa c'è il bonus della pista (20, 35, 50, 70, 90); **la prima volta**
   che finisci una pista il premio è 100, 200, 300, 400 o 500 monete.
 - **Cuori**: rarissimi, ridanno una vita (o 25 monete se le hai tutte).
-- **Palloncini**: salta, poi salta di nuovo in aria: il palloncino si consuma e
-  plani lontano (utile per buchi, acqua e lava).
+- **Palloncini**: con un palloncino il salto normale diventa un super salto e il
+  palloncino si consuma (utile per buchi, acqua e lava).
 - **Pila**: la parte sopra la testa del ragazzo diventa semitrasparente.
 - **Inseguitori** (vigile, animali, palle di neve): durano meno col carrello
   veloce e di più con quello lento.
@@ -100,18 +103,24 @@ Ognuna aggiunge qualcosa di suo:
 - I progressi (monete, carrelli, piste aperte e vinte, record) restano sul
   dispositivo (`src/progress.js`); su Playgama vanno anche nel loro cloud save.
 
-## Sfida (versus)
+## Classica e Arcade
 
-Su ogni pista sbloccata, accanto a **Gioca** c'è **Sfida**: una gara contro 1 o
-2 avversari (per ora guidati dal computer, con nome e felpa colorata) sulla
-stessa strada (`src/versus.js`).
+Nel menu, sotto la pista scelta, ci sono due modalità:
+
+- **Classica**: la tua lista, contro il tempo (tutto quello descritto sopra).
+- **Arcade**: tu contro **2 avversari** guidati dal computer, con nome e felpa
+  colorata, sulla stessa strada (`src/versus.js`). Prima si sceglie il livello:
+  **Principiante**, **Normale** o **Esperto** (velocità, precisione e quanto
+  vanno a cercare gli oggetti cambiano col livello; resta salvato).
+
+In Arcade:
 
 - Sulla pista ci sono **solo 7 oggetti** (7 prodotti di quella pista). Chi li ha
   **tutti e 7 vince subito**; dopo **3 minuti** vince chi ne ha di più.
-- Non si perdono vite e non si vincono monete: schianti, cadute, inseguitori,
-  treni e onde fanno **cadere l'oggetto in cima**, che resta sulla strada e
-  chiunque può raccoglierlo.
-- **Scontrarsi** con un avversario fa cadere un oggetto a entrambi.
+- Non si perdono vite: schianti, cadute, inseguitori, treni e onde fanno
+  **cadere gli oggetti**, che restano sulla strada e chiunque può raccoglierli.
+- **Urtarsi** fa solo rimbalzare i carrelli: nessuno perde niente.
+- Sulla strada ci sono **monete**: quelle raccolte restano tue.
 - Un oggetto rimasto indietro rispetto a tutti ricompare più avanti, così i 7
   restano sempre in gioco.
 - In alto a sinistra la classifica, al centro il tempo che resta.
@@ -129,6 +138,8 @@ stessa strada (`src/versus.js`).
 - La simulazione (`src/game.js`) è deterministica e separata dal disegno
   (`src/render3d.js`); i test guidano gare intere senza browser. `src/bot.js`
   è un pilota automatico (sfondo del menu, test, video).
+- Suoni e musica sintetizzati con Web Audio (`src/audio.js`), senza file: un
+  motivo tranquillo nel menu e uno incalzante diverso per ogni pista.
 - Lingue: en, it, fr, es, de, pt (`src/locales/`). Lingua da CrazyGames
   (`user.systemInfo.locale`) o dal browser, modificabile nelle impostazioni.
 - Il gioco sta tutto nel riquadro, senza barre di scorrimento, su computer e
