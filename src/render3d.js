@@ -54,6 +54,7 @@ export function createRenderer(canvas, fxLayer) {
     cops: new Map(),
     rollers: new Map(),
     decks: new Map(),
+    rivals: [],
     backdrop: null,
     checkout: null,
     dropping: new Set(),
@@ -100,6 +101,8 @@ export function setGame(R, g) {
   for (const tx of R.texts) tx.el.remove();
   R.texts = [];
   if (R.cart) R.scene.remove(R.cart.root);
+  for (const r of R.rivals) { R.scene.remove(r.V.root); r.tag?.remove(); }
+  R.rivals = [];
   for (const d of R.dogs.values()) R.scene.remove(d);
   R.dogs.clear();
   for (const p of R.cops.values()) R.scene.remove(p);
@@ -108,8 +111,6 @@ export function setGame(R, g) {
   R.rollers.clear();
   if (R.checkout) { R.scene.remove(R.checkout); R.checkout = null; }
   R.dropping.clear();
-  R.pile.clear();
-  R.balloons = [];
   R.broken.clear();
   R.game = g;
   // The track's sky and light.
@@ -124,22 +125,35 @@ export function setGame(R, g) {
   if (R.backdrop) R.scene.remove(R.backdrop);
   R.backdrop = buildBackdrop(T.theme);
   if (R.backdrop) R.scene.add(R.backdrop);
-  // The cart: root follows the road, body leans and spins, pile sits in the basket.
+  R.cart = makeCartView(R, g);
+  R.camPos.set(NaN, 0, 0);
+  R.camLook.set(NaN, 0, 0);
+}
+
+/** The cart: root follows the road, body leans and spins, pile sits in the basket. hoodie: the rider's colour. */
+function makeCartView(R, g, hoodie) {
   const root = new THREE.Group();
   const body = makeCart(g.cartType);
   const pile = new THREE.Group();
   body.add(pile);
-  const rider = makeRider();
+  const rider = makeRider(hoodie);
   rider.position.set(0, 0.26, 1.02);
   body.add(rider);
   const shadow = makeShadow(0.8);
   shadow.scale.set(1.3, 1, 2.1);
   root.add(shadow, body);
   R.scene.add(root);
-  R.cart = { root, body, pile, shadow, rider, cheer: 0 };
-  R.cartElev = g.world.elevation(g.cart.y);
-  R.camPos.set(NaN, 0, 0);
-  R.camLook.set(NaN, 0, 0);
+  return { root, body, pile, shadow, rider, cheer: 0, items: new Map(), balloons: [], elev: g.world.elevation(g.cart.y) };
+}
+
+/** Rival carts on the same road (versus): drawn like the player's, with a name tag. */
+export function setRivals(R, rivals) {
+  for (const r of R.rivals) { R.scene.remove(r.V.root); r.tag?.remove(); }
+  R.rivals = rivals.map(({ game, color, name }) => {
+    const tag = R.fxLayer ? document.createElement('div') : null;
+    if (tag) { tag.className = 'name-tag'; tag.style.setProperty('--c', color); R.fxLayer.append(tag); }
+    return { game, name, V: makeCartView(R, game, color), tag };
+  });
 }
 
 const v3 = new THREE.Vector3();
@@ -233,6 +247,16 @@ export function render(R, g, dt) {
   syncSections(R, g);
   syncEntities(R, g);
   syncCart(R, g, dt);
+  for (const r of R.rivals) {
+    syncCart(R, r.game, dt, r.V);
+    if (r.tag) {
+      const c2 = r.game.cart;
+      const p = worldPos(g, c2.x, c2.y, 2.6 + Math.min(4, stackHeight(r.game))).project(R.camera);
+      r.tag.hidden = p.z > 1 || c2.y < g.cart.y - 12;
+      r.tag.textContent = `${r.name} · ${r.game.stack.length}`;
+      r.tag.style.transform = `translate(${((p.x * 0.5 + 0.5) * R.W).toFixed(1)}px, ${((-p.y * 0.5 + 0.5) * R.H).toFixed(1)}px) translate(-50%, -100%)`;
+    }
+  }
   syncDogs(R, g);
   syncCops(R, g);
   syncRollers(R, g);
@@ -256,7 +280,7 @@ export function render(R, g, dt) {
   R.roll = (R.roll || 0) + (near - (R.roll || 0)) * Math.min(1, dt * 3);
   const back = (portrait ? 4.4 : 3.9) + H * 0.4 + out * 3 + R.wide * 0.9 + R.roll * 4.5;
   const up = (portrait ? 3.0 : 2.75) + H * 0.8 + out * 3 + R.wide * 0.8 + R.roll * 2.8;
-  const ground = R.cartElev;
+  const ground = R.cart.elev;
   const lookY = c.y + (portrait ? 9 : 7) - out * 6;
   const wantPos = v3.set(c.x * 0.85 + w.center(c.y - back) * 0.15, ground + up, -(c.y - back));
   // Far off (a new ride, a jump in time): go straight there instead of flying through the houses.
@@ -504,16 +528,17 @@ function syncEntities(R, g) {
   }
 }
 
-function syncCart(R, g, dt) {
+/** One cart and its rider, pile and balloons (the player's, or a rival's: V is its view). */
+function syncCart(R, g, dt, V = R.cart) {
   const c = g.cart;
   const w = g.world;
-  const { root, body, pile, shadow } = R.cart;
+  const { root, body, pile, shadow } = V;
   // Smooth the ground height so stairs feel like bumps, not teleports.
   const ground = w.elevation(c.y);
-  R.cartElev += (ground - R.cartElev) * Math.min(1, dt * 22);
-  if (Math.abs(ground - R.cartElev) > 2) R.cartElev = ground; // a jump in time, not a stair
-  if (dt === 0) R.cartElev = ground;
-  root.position.set(c.x, R.cartElev, -c.y);
+  V.elev += (ground - V.elev) * Math.min(1, dt * 22);
+  if (Math.abs(ground - V.elev) > 2) V.elev = ground; // a jump in time, not a stair
+  if (dt === 0) V.elev = ground;
+  root.position.set(c.x, V.elev, -c.y);
   // Point down the road, lean into turns, spin on oil, tip over at the end.
   const ahead = w.center(c.y + 2) - w.center(c.y);
   root.rotation.y = -Math.atan2(ahead + c.vx * 0.05, 2) * 0.8;
@@ -524,15 +549,15 @@ function syncCart(R, g, dt) {
   shadow.scale.set(1.3 * Math.max(0.4, 1 - c.z * 0.2), 1, 2.1 * Math.max(0.4, 1 - c.z * 0.2));
   shadow.visible = !(c.fall > 0);
   shadow.position.set(0, 0.02, 0.25);
-  R.cart.cheer = Math.max(0, R.cart.cheer - dt * 1.5);
-  poseRider(R.cart.rider, {
+  V.cheer = Math.max(0, V.cheer - dt * 1.5);
+  poseRider(V.rider, {
     lean: Math.max(-1, Math.min(1, c.vx / 5)), crouch: c.braking ? 1 : 0, air: Math.min(1, c.z * 1.5),
-    cheer: Math.min(1, R.cart.cheer), fall: c.flip, t: R.t,
+    cheer: Math.min(1, V.cheer), fall: c.flip, t: R.t,
   });
 
   // The pile: one model per thing in the stack, bending with the tilt.
   const current = new Set(g.stack);
-  for (const [it, obj] of R.pile) {
+  for (const [it, obj] of V.items) {
     if (!current.has(it)) {
       // It fell (or broke): it leaves the cart and flies off.
       obj.updateWorldMatrix(true, false);
@@ -548,15 +573,15 @@ function syncCart(R, g, dt) {
         R.debris.push({ obj, v: new THREE.Vector3(0, 1.5, 3 + c.v * 0.2), spin: new THREE.Vector3(4, 0, 0), life: 0.35 });
       } else R.debris.push({ obj, v: new THREE.Vector3(side * (2 + Math.random() * 2.5), 2.5 + Math.random() * 2, c.v * 0.35 + (Math.random() - 0.5) * 2), spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, side * 6), life: 4, broken });
       if (broken) splat(R, g, c.x + (Math.random() - 0.5) * 0.6, c.y - 0.5);
-      R.pile.delete(it);
+      V.items.delete(it);
     }
   }
   const tilt = g.tilt;
   const shiver = g.wobble > 0.7 ? Math.sin(R.t * 40) * 0.025 * g.wobble : 0;
   let base = 0;
   g.stack.forEach((it) => {
-    let obj = R.pile.get(it);
-    if (!obj) { obj = makeItem({ ...it, look: lookOf(g.track, it) }); pile.add(obj); R.pile.set(it, obj); }
+    let obj = V.items.get(it);
+    if (!obj) { obj = makeItem({ ...it, look: lookOf(g.track, it) }); pile.add(obj); V.items.set(it, obj); }
     const jx = (hashf(it.id, 1) - 0.5) * 0.28, jz = (hashf(it.id, 2) - 0.5) * 0.4;
     const b = base;
     const lean = tilt + shiver;
@@ -572,8 +597,8 @@ function syncCart(R, g, dt) {
   });
 
   // Balloons on strings from the handle, floating above the pile.
-  while (R.balloons.length > g.balloons.length) {
-    const b = R.balloons.pop();
+  while (V.balloons.length > g.balloons.length) {
+    const b = V.balloons.pop();
     body.remove(b.obj, b.line);
     {
       b.obj.updateWorldMatrix(true, false);
@@ -582,16 +607,16 @@ function syncCart(R, g, dt) {
       R.debris.push({ obj: b.obj, v: new THREE.Vector3((Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2), spin: new THREE.Vector3(), life: 4, floats: true });
     }
   }
-  while (R.balloons.length < g.balloons.length) {
-    const data = g.balloons[R.balloons.length];
+  while (V.balloons.length < g.balloons.length) {
+    const data = g.balloons[V.balloons.length];
     const obj = makeBalloon(data.color);
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([HANDLE, HANDLE]), stringMat);
     body.add(obj, line);
-    R.balloons.push({ obj, line });
+    V.balloons.push({ obj, line });
   }
-  const n = R.balloons.length;
+  const n = V.balloons.length;
   const top = BASKET_Y + Math.max(1.3, stackHeight(g) + 0.8);
-  R.balloons.forEach((b, i) => {
+  V.balloons.forEach((b, i) => {
     const spread = (i - (n - 1) / 2) * 0.45;
     const x = spread + Math.sin(R.t * 2.1 + i) * 0.12 - c.vx * 0.03;
     const y = top + (i % 2) * 0.35 + Math.sin(R.t * 3 + i * 1.7) * 0.07;
@@ -640,10 +665,12 @@ function splat(R, g, x, y) {
   R.debris.push({ obj: grp, v: new THREE.Vector3(), spin: new THREE.Vector3(), life: 8, decal: true });
 }
 
-function syncDogs(R, g) {
-  const live = new Set(g.dogs);
+function syncDogs(R, g0) {
+  // the player's chasers and the rivals' (each runs after its own cart)
+  const pairs = [g0, ...R.rivals.map((r) => r.game)].flatMap((gg) => gg.dogs.map((d) => [gg, d]));
+  const live = new Set(pairs.map(([, d]) => d));
   for (const [d, obj] of R.dogs) if (!live.has(d)) { R.scene.remove(obj); R.dogs.delete(d); }
-  for (const d of g.dogs) {
+  for (const [g, d] of pairs) {
     let obj = R.dogs.get(d);
     if (!obj) {
       obj = new THREE.Group();
@@ -670,10 +697,11 @@ function syncDogs(R, g) {
   }
 }
 
-function syncCops(R, g) {
-  const live = new Set(g.cops);
+function syncCops(R, g0) {
+  const pairs = [g0, ...R.rivals.map((r) => r.game)].flatMap((gg) => gg.cops.map((p) => [gg, p]));
+  const live = new Set(pairs.map(([, p]) => p));
   for (const [p, obj] of R.cops) if (!live.has(p)) { R.scene.remove(obj); R.cops.delete(p); }
-  for (const p of g.cops) {
+  for (const [g, p] of pairs) {
     let obj = R.cops.get(p);
     if (!obj) {
       obj = new THREE.Group();

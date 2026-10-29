@@ -100,6 +100,22 @@ Ognuna aggiunge qualcosa di suo:
 - I progressi (monete, carrelli, piste aperte e vinte, record) restano sul
   dispositivo (`src/progress.js`); su Playgama vanno anche nel loro cloud save.
 
+## Sfida (versus)
+
+Su ogni pista sbloccata, accanto a **Gioca** c'è **Sfida**: una gara contro 1 o
+2 avversari (per ora guidati dal computer, con nome e felpa colorata) sulla
+stessa strada (`src/versus.js`).
+
+- Sulla pista ci sono **solo 7 oggetti** (7 prodotti di quella pista). Chi li ha
+  **tutti e 7 vince subito**; dopo **3 minuti** vince chi ne ha di più.
+- Non si perdono vite e non si vincono monete: schianti, cadute, inseguitori,
+  treni e onde fanno **cadere l'oggetto in cima**, che resta sulla strada e
+  chiunque può raccoglierlo.
+- **Scontrarsi** con un avversario fa cadere un oggetto a entrambi.
+- Un oggetto rimasto indietro rispetto a tutti ricompare più avanti, così i 7
+  restano sempre in gioco.
+- In alto a sinistra la classifica, al centro il tempo che resta.
+
 ## Tecnica
 
 - HTML5 + JavaScript (moduli ES), **Three.js r170** in `vendor/three/` (MIT),

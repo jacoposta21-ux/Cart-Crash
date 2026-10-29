@@ -9,7 +9,8 @@ import { wanted, isNeeded, lightPhase, crossTime, RAIL_WARN } from './game.js';
 
 /**
  * opts.greedy: grab anything in reach and keep extras; opts.runReds: no stopping
- * at lights (both for the trailer's staged race).
+ * at lights (both for the trailer's staged race). opts.target: where to head
+ * when there is nothing to grab (versus: a rival to bump into).
  */
 export function botSteer(g, skill = 1, opts = {}) {
   const c = g.cart;
@@ -23,16 +24,17 @@ export function botSteer(g, skill = 1, opts = {}) {
     const dy = e.y - c.y;
     if (dy < 0.6 || e.taken || e.kind !== 'item') continue;
     const key = e.type === 'goods' ? e.goods : e.type;
-    const want = wanted(g, key);
+    const want = g.versus ? e.vs : wanted(g, key);
     if (!want && !opts.greedy) continue;
     const reach = Math.abs(e.x - c.x) / Math.max(dy, 0.5);
     if (reach > 1.4) continue;
     const score = 3 - dy * 0.12 - reach;
     if (score > best) { best = score; targetX = e.x; }
   }
+  if (best === -Infinity && opts.target !== undefined) targetX = opts.target;
   for (let i = g.next; i < ents.length && ents[i].y < c.y + 8; i++) {
     const e = ents[i];
-    if (!opts.greedy && e.kind === 'item' && e.y > c.y + 0.5 && (e.type === 'balloon' || !wanted(g, e.type === 'goods' ? e.goods : e.type)) && Math.abs(targetX - e.x) < 0.9) {
+    if (!opts.greedy && !g.versus && e.kind === 'item' && e.y > c.y + 0.5 && (e.type === 'balloon' || !wanted(g, e.type === 'goods' ? e.goods : e.type)) && Math.abs(targetX - e.x) < 0.9) {
       targetX = e.x + (targetX >= e.x ? 1 : -1) * 1.1; // keep extras out of the cart
       continue;
     }
@@ -77,7 +79,7 @@ export function botSteer(g, skill = 1, opts = {}) {
   // A dog close behind and slowing down: throw it the top thing unless that is on the list.
   for (const d of g.dogs) {
     const treat = ents.some((e) => e.kind === 'dropped' && !e.eaten && e.y > d.y && e.y < c.y);
-    if (d.state === 'chase' && !treat && c.y - d.y < 3.5 && g.stack.length) {
+    if (d.state === 'chase' && !treat && c.y - d.y < 3.5 && g.stack.length && !g.versus) {
       const top = g.stack[g.stack.length - 1];
       if (!isNeeded(g, top) || c.v < 6) out.drop = true;
     }
@@ -103,7 +105,7 @@ export function botSteer(g, skill = 1, opts = {}) {
   if (g.cops.some((p) => p.state === 'chase') || g.rollers.some((q) => q.gap < 12)) out.brake = false;
   // An extra on top of the pile: throw it away.
   const top = g.stack[g.stack.length - 1];
-  if (!opts.greedy && top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;
+  if (!opts.greedy && !g.versus && top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;
   const err = targetX - c.x - c.vx * 0.12;
   const dead = 0.12 + (1 - skill) * 0.4;
   out.steer = Math.abs(err) < dead ? 0 : Math.max(-1, Math.min(1, err * 1.6));

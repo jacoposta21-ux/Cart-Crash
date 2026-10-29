@@ -507,9 +507,10 @@ export function makeObstacle(type) {
 }
 
 /** The rider: a kid in a hoodie and a backwards cap, standing on the back of the cart. */
-export function makeRider() {
+/** The rider (hoodieColor: orange for the player, other colours for rivals). */
+export function makeRider(hoodieColor = '#ff7a2f') {
   const g = new THREE.Group();
-  const hoodie = mat('#ff7a2f'), jeans = mat('#30507a'), skin = mat('#f1c27d'), shoe = mat('#ffffff');
+  const hoodie = mat(hoodieColor), jeans = mat('#30507a'), skin = mat('#f1c27d'), shoe = mat('#ffffff');
   const hips = new THREE.Group();
   hips.position.set(0, 0.95, 0);
   g.add(hips);

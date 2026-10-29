@@ -140,6 +140,25 @@ html, body {
 .cart-stats .lives { display: flex; gap: 3px; }
 .card-help { width: min(520px, 100%); }
 
+/* versus */
+.play-row { flex-wrap: nowrap; align-items: stretch; }
+.play-row .btn-big { flex: 2 1 0; }
+.versus-btn { flex: 1 1 0; min-width: 0; padding: 6px 10px; font-size: 1.05rem; }
+.versus-btn small { font-family: var(--body); font-weight: 800; font-size: 0.72rem; letter-spacing: 0; opacity: 0.8; }
+.vs-board { display: none; list-style: none; margin: 0; padding: 4px 6px; flex-direction: column; gap: 3px; background: rgba(29, 35, 64, 0.85); border-radius: 12px; color: #fff; font-weight: 800; font-size: 0.85rem; min-width: 128px; }
+.vs-board li { display: flex; align-items: center; gap: 6px; }
+.vs-board li::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.vs-board li b { margin-left: auto; font-family: var(--display); font-weight: 400; font-size: 1rem; color: #ffd23f; }
+.vs-board li.me { color: #ffd23f; }
+.versus .vs-board { display: flex; }
+.versus #hud-list, .versus #hud-goal, .versus #hud-lives, .versus #hud-coins { display: none !important; }
+.timer.hurry { color: #ff4f6d; }
+.name-tag {
+  position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 999px; white-space: nowrap; pointer-events: none;
+  background: var(--c); color: #fff; font-family: var(--display); font-size: 0.95rem; -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
 /* end */
 .kicker { margin: 0; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8rem; color: var(--teal); }
 .score-wrap { margin: 0; display: flex; flex-direction: column; align-items: center; font-weight: 800; color: var(--ink-2); }

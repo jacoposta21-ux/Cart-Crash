@@ -1,7 +1,8 @@
 // Cart Crash: screens, input, the game loop, records and the portal hooks.
 import { BUILD } from './build.js';
 import { createGame, step, drainEvents, result, count, handling, listProgress, extras, EXTRA_PENALTY } from './game.js';
-import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon, cartIcon } from './render3d.js';
+import { createRenderer, resizeRenderer, setGame, setRivals, onEvents, render, itemIcon, cartIcon } from './render3d.js';
+import { createMatch, stepMatch, standings, VS_TIME, VS_THINGS } from './versus.js';
 import { TRACKS, TRACK_ORDER } from './tracks.js';
 import { CARTS, CART_ORDER } from './carts.js';
 import { createProgress, mergeProgress, PROGRESS_KEYS, KEYS } from './progress.js';
@@ -34,6 +35,7 @@ let lastTime = 0;
 let acc = 0;
 let lastSection = null;
 let banked = 0; // coins of this ride already added to the purse
+let match = null; // a versus race (src/versus.js): game is then the player's cart in it
 // Coins, carts and tracks (src/progress.js); records also go to the portal's cloud save.
 const progress = createProgress({ load, save: (k, v) => saveProgress(k, v) });
 let pickTrack = progress.track(); // the track shown in the menu
@@ -145,6 +147,7 @@ function renderMenu() {
   card.classList.toggle('locked', !open);
   card.dataset.track = id;
   $('btn-play').disabled = !open;
+  $('btn-versus').disabled = !open;
   $('menu-coins').textContent = String(progress.coins());
   const K = CARTS[progress.cart()];
   $('menu-records').textContent = `${t('Cart')}: ${t(CART_NAME[progress.cart()])} · ${t('Lives')} ${K.lives}`;
@@ -253,20 +256,26 @@ function goMenu() {
   audio.stopMusic();
   audio.rolling(0, false);
   game = null;
+  match = null;
+  document.documentElement.classList.remove('versus');
   pickTrack = progress.track();
   newDemo();
   renderMenu();
   show('screen-menu');
 }
 
-/** A new race on this track (the chosen one by default) with the cart in use. */
-function start(track = progress.track()) {
+/** A new race on this track (the chosen one by default) with the cart in use. versus: against rivals for 7 things. */
+function start(track = progress.track(), versus = false) {
   audio.unlock();
   bankCoins();
   const seed = TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0;
-  game = createGame(seed, { track: TEST && params.get('track') ? params.get('track') : track, cart: progress.cart() });
+  const tr = TEST && params.get('track') ? params.get('track') : track;
+  match = versus ? createMatch(seed, { track: tr, cart: progress.cart(), rivals: TEST && params.get('rivals') ? Number(params.get('rivals')) : 1 + (seed % 2) }) : null;
+  game = match ? match.games[0] : createGame(seed, { track: tr, cart: progress.cart() });
   banked = 0;
   setGame(R, game);
+  if (match) setRivals(R, match.games.slice(1).map((g, i) => ({ game: g, color: match.colors[i], name: match.names[i] })));
+  document.documentElement.classList.toggle('versus', Boolean(match));
   lastSection = game.world.sectionAt(0).kind;
   acc = 0;
   pointers.clear();
@@ -275,11 +284,13 @@ function start(track = progress.track()) {
   show(null);
   buildList();
   updateHud(true);
-  if (game.T.roller === 'boulder') showHint(t('A boulder is rolling after you: never stop!'), 3500);
+  if (match) showHint(t('Grab the {n} things! Bump into the others to make them drop theirs. All {n} wins at once; after 3 minutes, the most wins.', { n: VS_THINGS }), 5000);
+  else if (game.T.roller === 'boulder') showHint(t('A boulder is rolling after you: never stop!'), 3500);
   else showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop · Q balloon'), 3500);
   portal.gameplay(true);
   audio.startMusic();
   saveProgress(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
+  if (match) toast(t('Versus: {names}', { names: match.names.join(' · ') }));
 }
 
 function pause() {
@@ -310,6 +321,7 @@ function finish() {
   audio.stopMusic();
   audio.rolling(0, false);
   bankCoins();
+  if (match) { renderVersusEnd(); show('screen-end'); if (match.winner === 0) audio.record(); return; }
   const r = result(game);
   const best = progress.best(game.track);
   const isRecord = r.won && (best === null || r.total < best);
@@ -321,6 +333,27 @@ function finish() {
   renderEnd(r, isRecord, best, opened);
   show('screen-end');
   if (isRecord) { audio.record(); portal.happytime(); }
+}
+
+/** Versus: the places, and how many of the 7 each one had. */
+function renderVersusEnd() {
+  const order = standings(match);
+  const place = order.indexOf(0);
+  $('end-title').textContent = match.winner === 0 ? t('You win!') : place === 1 ? t('2nd place') : t('3rd place');
+  $('end-record').hidden = true;
+  $('end-unlock').hidden = true;
+  $('end-score').textContent = `${game.stack.length}/${VS_THINGS}`;
+  $('end-score-label').textContent = t('things');
+  const slots = [['end-a-label', 'end-a'], ['end-b-label', 'end-b'], ['end-c-label', 'end-crashes']];
+  const others = order.filter((i) => i !== 0);
+  slots.forEach(([l, v], k) => {
+    const i = others[k];
+    const time = i === undefined;
+    $(l).textContent = time ? t('Time') : match.names[i - 1];
+    $(v).textContent = time ? formatTime(Math.min(VS_TIME, match.t)) : `${match.games[i].stack.length}/${VS_THINGS}`;
+  });
+  $('end-coins').textContent = '';
+  $('end-best').textContent = match.winner === 0 ? t('All the things are yours!') : t('Bump into the others to make them drop theirs!');
 }
 
 function renderEnd(r, isRecord, prevBest, opened) {
@@ -342,6 +375,7 @@ function renderEnd(r, isRecord, prevBest, opened) {
     $('end-b-label').textContent = t('Time');
     $('end-b').textContent = formatTime(r.time);
   }
+  $('end-c-label').textContent = t('Crashes');
   $('end-crashes').textContent = String(r.crashes);
   $('end-coins').innerHTML = `<i class="coin"></i> +${game.coins + firstReward}${game.bonus ? ` <small>(${t('checkout bonus +{n}', { n: game.bonus })}${firstReward ? ` · ${t('first win +{n}', { n: firstReward })}` : ''})</small>` : ''}`;
   $('end-unlock').hidden = !opened;
@@ -396,6 +430,7 @@ let livesShown = -1;
 let coinsShown = -1;
 function updateHud(force) {
   const g = game;
+  if (match) { updateVersusHud(force); return; }
   $('hud-time').textContent = formatTime(g.won ? g.finishTime : g.t);
   const prog = listProgress(g);
   const lk = prog.map((p) => p.have).join() + getLang();
@@ -460,6 +495,26 @@ function updateHud(force) {
   $('hud-chips').replaceChildren(...chips);
 }
 
+/** Versus: time left and who has how many of the 7. */
+let vsKey = '';
+function updateVersusHud(force) {
+  $('hud-time').textContent = formatTime(Math.max(0, VS_TIME - match.t));
+  $('hud-time').classList.toggle('hurry', VS_TIME - match.t < 20);
+  const order = standings(match);
+  const key = order.map((i) => `${i}:${match.games[i].stack.length}`).join() + getLang();
+  if (key === vsKey && !force) return;
+  vsKey = key;
+  $('hud-vs').replaceChildren(...order.map((i) => {
+    const li = document.createElement('li');
+    li.className = i === 0 ? 'me' : '';
+    li.style.setProperty('--c', i === 0 ? '#ff7a2f' : match.colors[i - 1]);
+    const b = document.createElement('b');
+    b.textContent = `${match.games[i].stack.length}/${VS_THINGS}`;
+    li.append(i === 0 ? t('You') : match.names[i - 1], b);
+    return li;
+  }));
+}
+
 function label(kind, e) {
   if (kind === 'pickup') return e.item === 'balloon' ? t('Balloons') : nameOf(e.key);
   if (kind === 'crowdhit') return t('Watch out!');
@@ -502,12 +557,13 @@ function handleEvents(g, events, live) {
     if (e.type === 'heart') toast(e.coins ? t('+{n} coins', { n: e.coins }) : t('+1 life!'), 'go');
     if (e.type === 'boost') toast(t('Turbo!'), 'go');
     if (e.type === 'skijump' || e.type === 'geyser') toast(t('Wheee!'));
+    if (e.type === 'vsbump') { toast(t('Bump!')); audio.play({ type: 'crash' }); }
     if (e.type === 'bridge') toast(t('The bridge is giving way: don\'t slow down!'), 'warn');
     if (e.type === 'wave' && !shownTips.has('wave')) { shownTips.add('wave'); showHint(t('A wave! Jump it, or it pushes you off the pier.'), 3200); }
     if (e.type === 'stolen' && !shownTips.has('stolen')) { shownTips.add('stolen'); showHint(t('It stole the top of your pile! Keep rolling fast, or drop something for it.'), 3500); }
     if (e.type === 'roller') showHint(t('A giant snowball is rolling after you: don\'t slow down!'), 3200);
     if (e.type === 'glide' && !shownTips.has('glide')) { shownTips.add('glide'); toast(t('Gliding!'), 'go'); }
-    if (e.type === 'respawn') showHint(e.lives === 1 ? t('Careful: one more crash and you are out!') : t('Stay on the rainbow: off the edge costs a life!'), 2500);
+    if (e.type === 'respawn' && !match) showHint(e.lives === 1 ? t('Careful: one more crash and you are out!') : game.fellInto === 'space' ? t('Stay on the rainbow: off the edge costs a life!') : t('Off the edge costs a life!'), 2500);
   }
 }
 
@@ -530,14 +586,24 @@ function frame(dt) {
   if (mode === 'play' && game) {
     const autopilot = params.has('autopilot');
     const policy = POLICIES[params.get('policy')] || POLICIES.bot;
-    simulate(game, dt, () => (autopilot ? policy(game) : readInput()), true);
+    if (match) {
+      // versus: every cart moves on the same road
+      acc += Math.min(dt, 0.1);
+      while (acc >= DT) {
+        acc -= DT;
+        stepMatch(match, DT, autopilot ? policy(game) : readInput());
+        handleEvents(game, drainEvents(game), true);
+        for (const g of match.games.slice(1)) drainEvents(g);
+      }
+    } else simulate(game, dt, () => (autopilot ? policy(game) : readInput()), true);
     const sec = game.world.sectionAt(game.cart.y + 12).kind;
     if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && game.checkoutY === null) toast(t(SECTION_TOAST[sec])); }
     audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.over);
     updateHud(false);
-    if (game.over && game.overT > (game.won ? 2.2 : 1.6)) finish();
+    if (match ? match.over && match.overT > 2 : game.over && game.overT > (game.won ? 2.2 : 1.6)) finish();
     render(R, game, dt);
   } else if (mode === 'end' && game) {
+    if (match) for (const g of match.games.slice(1)) step(g, Math.min(dt, 0.05), 0);
     step(game, Math.min(dt, 0.05), 0);
     drainEvents(game);
     render(R, game, dt);
@@ -604,11 +670,12 @@ function translatePage() {
 function wire() {
   const on = (id, fn) => $(id).addEventListener('click', () => { audio.unlock(); audio.click(); fn(); });
   on('btn-play', () => { if (progress.isOpen(pickTrack)) { progress.selectTrack(pickTrack); start(pickTrack); } });
-  on('btn-again', () => afterRide(() => start(game.track)));
+  on('btn-versus', () => { if (progress.isOpen(pickTrack)) { progress.selectTrack(pickTrack); start(pickTrack, true); } });
+  on('btn-again', () => afterRide(() => start(game.track, Boolean(match))));
   on('btn-menu', () => afterRide(goMenu));
   on('btn-pause', pause);
   on('btn-resume', resume);
-  on('btn-restart', () => start(game.track));
+  on('btn-restart', () => start(game.track, Boolean(match)));
   on('track-prev', () => pickTrackBy(-1));
   on('track-next', () => pickTrackBy(1));
   on('btn-garage', () => { pickCart = progress.cart(); renderGarage(); openScreen('screen-garage'); });
@@ -680,6 +747,7 @@ if (TEST) {
   window.__cc = {
     get mode() { return mode; },
     get game() { return game; },
+    get match() { return match; },
     start,
     pause,
     progress,

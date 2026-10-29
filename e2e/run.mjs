@@ -349,6 +349,23 @@ log('\n▶ coins, garage and tracks');
     check(await page.evaluate(() => window.__cc.game.track) === id && await page.evaluate(() => window.__cc.game.distance) > 40, `tracks: a ride on ${id}`);
     await page.screenshot({ path: join(SHOTS, `${id}.png`) });
   }
+  // Versus: against the computer, for 7 things, 3 minutes.
+  await page.evaluate(() => { window.__cc.pause(); });
+  await page.click('#btn-quit');
+  const coins0 = Number(await ls('cartcrash:coins'));
+  await page.click('#btn-versus');
+  check(await page.evaluate(() => Boolean(window.__cc.match) && window.__cc.match.games.length >= 2), 'versus: a match with 1 or 2 rivals starts');
+  check(await visible(page, '#hud-vs') && !(await visible(page, '#hud-list')), 'versus: the scoreboard instead of the shopping list');
+  await frames(page, 120);
+  await page.screenshot({ path: join(SHOTS, 'versus.png') });
+  await page.evaluate(() => { window.__cc.match.t = 179.95; });
+  await frames(page, 80);
+  check(await page.evaluate(() => window.__cc.mode) === 'end' && /win|place/.test(await page.textContent('#end-title')), `versus: after 3 minutes, the result (${await page.textContent('#end-title')})`);
+  check(Number(await ls('cartcrash:coins')) === coins0, 'versus: no coins won');
+  await audit(page, 'versus end');
+  await page.click('#btn-again');
+  await page.waitForFunction(() => window.__cc.mode === 'play');
+  check(await page.evaluate(() => Boolean(window.__cc.match)), 'versus: play again is another match');
   check(errors.length === 0, `progression: errors ${errors.join(' | ')}`);
   await ctx.close();
 }

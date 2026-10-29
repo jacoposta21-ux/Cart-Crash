@@ -101,15 +101,20 @@ export function makeList(seed, n = 4, track = 'borgo') {
 /** Seconds added to the time for each thing in the cart that is not on the list (or one too many). */
 export const EXTRA_PENALTY = 5;
 
-/** opts: list (else a random one), track (a TRACKS id), cart (a CARTS id). */
+/**
+ * opts: list (else a random one), track (a TRACKS id), cart (a CARTS id), versus
+ * (a race against rivals for 7 things, src/versus.js: no lives lost, no checkout,
+ * whatever falls off the cart stays on the road for anyone to grab).
+ */
 export function createGame(seed, opts = {}) {
   const track = TRACKS[opts.track] ? opts.track : 'borgo';
   const cart = CARTS[opts.cart] ? opts.cart : 'classic';
   const T = TRACKS[track];
   const K = CARTS[cart];
-  const list = opts.list || makeList(seed, T.listSize, track);
+  const list = opts.versus ? [] : opts.list || makeList(seed, T.listSize, track);
   return {
     seed,
+    versus: Boolean(opts.versus),
     list,
     track,
     T,
@@ -117,7 +122,7 @@ export function createGame(seed, opts = {}) {
     K,
     coins: 0, // picked up on this ride (plus the bonus at the checkout)
     bonus: 0,
-    world: createWorld(seed, { wanted: list.map((l) => l.key), track }),
+    world: opts.world || createWorld(seed, { wanted: list.map((l) => l.key), track, versus: Boolean(opts.versus) }),
     t: 0,
     over: false,
     won: false,
@@ -125,8 +130,8 @@ export function createGame(seed, opts = {}) {
     overT: 0,
     finishTime: 0,
     distance: 0,
-    lives: K.lives,
-    maxLives: K.lives,
+    lives: opts.versus ? 99 : K.lives,
+    maxLives: opts.versus ? 0 : K.lives,
     crashes: 0,
     checkoutY: null,
     next: 0, // first entity not yet behind the cart
@@ -202,8 +207,25 @@ function loseTop(g, why, side = 0) {
   const it = g.stack.pop();
   if (!it) return null;
   g.lost.push({ ...it, why });
-  emit(g, 'fall', { item: it, why, side: side || (g.rand() < 0.5 ? -1 : 1), height: stackHeight(g), wanted: wanted(g, itemKey(it)) });
+  const sd = side || (g.rand() < 0.5 ? -1 : 1);
+  emit(g, 'fall', { item: it, why, side: sd, height: stackHeight(g), wanted: wanted(g, itemKey(it)) });
+  if (g.versus) spill(g, it, sd);
   return it;
+}
+
+/** The top thing falls off (why: 'bump', 'crash'…); in versus it lands on the road. */
+export const knockOff = (g, why, side = 0) => loseTop(g, why, side);
+
+/** Versus: what falls off lands on the road a little behind and to the side, for anyone to grab. */
+function spill(g, it, side) {
+  const c = g.cart;
+  const w = g.world;
+  const y = c.y - 2.2 - g.rand() * 1.5;
+  const lim = w.halfWidth(y) - 0.6;
+  const x = Math.max(w.center(y) - lim, Math.min(w.center(y) + lim, c.x + side * (0.8 + g.rand() * 1.2)));
+  const e = { id: w.nextId++, kind: 'item', type: it.type, x, y, vs: true };
+  if (it.goods) e.goods = it.goods;
+  insertEntity(g, e);
 }
 
 /** A bump: shakes the pile, may throw off what sticks out, breaks eggs on hard ones. */
@@ -237,7 +259,7 @@ function pickUp(g, e) {
   if (e.type === 'goods') it.goods = e.goods;
   it.h = itemHeight(it);
   const key = itemKey(it);
-  const isWanted = wanted(g, key);
+  const isWanted = g.versus || wanted(g, key);
   g.stack.push(it);
   // Something landing in the basket rocks it a little.
   g.tiltV += (g.rand() - 0.5) * (0.6 + it.h);
@@ -248,6 +270,7 @@ function pickUp(g, e) {
 
 /** Loses a life (crash or dog bite). Returns true when that was the last one. */
 function loseLife(g, why) {
+  if (g.versus) { loseTop(g, 'crash'); g.cart.safe = SAFE_TIME; return false; } // no lives in versus: a thing falls off instead
   g.lives--;
   g.crashes++;
   g.cart.safe = SAFE_TIME;
@@ -265,6 +288,7 @@ function crash(g, e) {
   c.vx = -e.knockDir * 4.5;
   emit(g, 'crash', { obstacle: e.type, x: e.x, y: e.y, lives: g.lives - 1 });
   if (loseLife(g, e.type)) return;
+  if (g.versus) { jolt(g, 0.75 + o.height * 0.2, 'crash'); return; }
   if (g.balloons.length && g.rand() < 0.5) {
     const b = g.balloons.pop();
     g.lost.push({ type: 'balloon', why: 'popped', ...b });
@@ -296,6 +320,7 @@ function win(g) {
 
 /** Drops the thing on top of the pile behind the cart (to make room, or for a dog). */
 function drop(g) {
+  if (g.versus) { if (g.stack.length) { g.dropped++; loseTop(g, 'dropped'); } return; }
   const it = g.stack.pop();
   if (!it) return;
   g.dropped++;
@@ -352,7 +377,7 @@ export function step(g, dt, input = 0) {
     g.distance = c.y;
     if (c.fall > FALL_TIME) {
       if (loseLife(g, 'fall')) return;
-      loseTop(g, 'fell');
+      if (!g.versus) loseTop(g, 'fell');
       c.fall = 0; c.z = 0; c.vz = 0; c.vx = 0; c.oil = 0; c.glide = 0;
       // back on solid road: past the gap (or the broken bridge), in the middle
       for (const gp of w.gapsIn(c.y - 1, c.y + 1)) c.y = gp.y + gp.len + 1;
@@ -604,7 +629,8 @@ export function step(g, dt, input = 0) {
   const mark = [2.5, 4].filter((m) => H2 >= m).length;
   if (mark > g.tallMark) { g.tallMark = mark; emit(g, 'tall', { height: H2 }); }
 
-  // The checkout appears once everything on the list is in the cart.
+  // The checkout appears once everything on the list is in the cart (not in versus).
+  if (g.versus) return;
   const done = listDone(g);
   if (done && g.checkoutY === null) {
     g.checkoutY = c.y + CHECKOUT_AHEAD;
@@ -726,6 +752,12 @@ function stepRail(g, e) {
     if (span && Math.abs(c.y - e.y) < vehicleOf(e).reach && c.x > span.min - 0.6 && c.x < span.max + 0.6 && c.z < 2) {
       c.v = 0;
       g.hitBy = e.vehicle || 'train';
+      if (g.versus) {
+        // knocked flat: two things fly off, and a moment to get going again
+        if (c.safe <= 0) { loseTop(g, 'crash'); loseTop(g, 'crash'); emit(g, 'crash', { obstacle: g.hitBy, x: c.x, y: c.y, lives: g.lives }); }
+        c.safe = Math.max(c.safe, 2);
+        return;
+      }
       gameOver(g, 'train', g.hitBy);
     }
   }
