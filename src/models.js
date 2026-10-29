@@ -114,9 +114,72 @@ const GOODS_MAKERS = {
   },
 };
 
-/** A grabbable thing. it: { type, goods?, color? }. */
+
+// helpers for the small things
+const G = (...parts) => { const g = new THREE.Group(); for (const p of parts) g.add(p); return g; };
+const rot = (m, x = 0, y = 0, z = 0) => { m.rotation.set(x, y, z); return m; };
+const sc = (m, x, y, z) => { m.scale.set(x, y, z); return m; };
+
+Object.assign(GOODS_MAKERS, {
+  // Old Town
+  pasta: () => G(mesh(box(0.34, 0.42, 0.14), mat('#1f5fa8'), 0, 0.21, 0), mesh(box(0.2, 0.18, 0.15), mat('#f4d58d'), 0, 0.24, 0)),
+  coffee: () => G(mesh(cyl(0.15, 0.15, 0.3, 10), mat('#5c3d2e'), 0, 0.15, 0), mesh(cyl(0.155, 0.155, 0.06, 10), mat('#c0392b'), 0, 0.33, 0)),
+  // Mountain
+  apple: () => G(mesh(sph(0.15, 8, 6), mat('#d62f2f'), 0, 0.15, 0), mesh(box(0.02, 0.08, 0.02), mat('#5c4033'), 0, 0.31, 0), rot(mesh(box(0.1, 0.02, 0.06), mat('#3c9a3c'), 0.05, 0.31, 0), 0, 0, 0.4)),
+  speck: () => G(rot(mesh(cyl(0.13, 0.13, 0.5, 8), mat('#a63d2f'), 0, 0.14, 0), 0, 0, Math.PI / 2), rot(mesh(cyl(0.135, 0.135, 0.06, 8), mat('#f4f1ea'), 0.25, 0.14, 0), 0, 0, Math.PI / 2)),
+  cocoa: () => G(mesh(cyl(0.14, 0.14, 0.38, 10), mat('#7a4a2a'), 0, 0.19, 0), mesh(cyl(0.145, 0.145, 0.12, 10), mat('#f4d58d'), 0, 0.2, 0)),
+  milk: () => G(mesh(box(0.22, 0.42, 0.22), mat('#ffffff'), 0, 0.21, 0), rot(mesh(box(0.16, 0.16, 0.23), mat('#3a86ff'), 0, 0.46, 0), 0, 0, Math.PI / 4), mesh(box(0.225, 0.12, 0.225), mat('#3a86ff'), 0, 0.2, 0)),
+  ryebread: () => G(sc(mesh(sph(0.2, 10, 6), mat('#6b4226'), 0, 0.16, 0), 1.5, 0.8, 1.1)),
+  marshmallow: () => G(mesh(box(0.34, 0.38, 0.14), mat('#f7c8e0', { opacity: 0.9 }), 0, 0.19, 0), mesh(box(0.08, 0.08, 0.15), mat('#ffffff'), -0.08, 0.15, 0), mesh(box(0.08, 0.08, 0.15), mat('#ffffff'), 0.08, 0.22, 0)),
+  firewood: () => { const g = new THREE.Group(); [[-0.1, 0.09], [0.1, 0.09], [0, 0.26]].forEach(([x, y]) => g.add(rot(mesh(cyl(0.09, 0.09, 0.5, 7), mat('#8b5a2b'), x, y, 0), Math.PI / 2))); return g; },
+  cookies: () => G(mesh(box(0.42, 0.2, 0.26), mat('#c0392b'), 0, 0.1, 0), ...[-0.1, 0.1].map((x) => mesh(cyl(0.1, 0.1, 0.05, 10), mat('#d9a35b'), x, 0.225, 0)), ...[-0.1, 0.1].map((x) => mesh(sph(0.025, 4, 3), mat('#5c3d2e'), x, 0.26, 0.03))),
+  // Sea
+  fish: () => G(sc(mesh(sph(0.15, 8, 6), mat('#9fb7c8'), 0, 0.13, 0), 2.2, 0.8, 0.6), rot(mesh(cone(0.12, 0.18, 4), mat('#7f9aac'), 0.38, 0.13, 0), 0, 0, -Math.PI / 2)),
+  shrimp: () => G(mesh(box(0.44, 0.06, 0.3), mat('#ffffff'), 0, 0.03, 0), ...[-0.12, 0, 0.12].map((x) => sc(mesh(sph(0.08, 6, 5), mat('#ff8c69'), x, 0.12, 0), 1.6, 1, 1))),
+  lemon: () => G(sc(mesh(sph(0.13, 8, 6), mat('#ffe14d'), 0, 0.14, 0), 1.35, 1, 1)),
+  icepop: () => G(mesh(box(0.16, 0.36, 0.08), mat('#ff4f6d'), 0, 0.3, 0), mesh(box(0.16, 0.12, 0.081), mat('#ffd23f'), 0, 0.42, 0), mesh(box(0.04, 0.14, 0.03), mat('#d9b07a'), 0, 0.07, 0)),
+  icecream: () => G(rot(mesh(cone(0.11, 0.3, 8), mat('#d9a35b'), 0, 0.15, 0), Math.PI), mesh(sph(0.13, 8, 6), mat('#ff9ec4'), 0, 0.36, 0), mesh(sph(0.03, 5, 4), mat('#e63946'), 0, 0.5, 0)),
+  beachball: () => G(mesh(sph(0.25, 10, 8), mat('#ffffff'), 0, 0.25, 0), mesh(cyl(0.252, 0.252, 0.12, 10), mat('#e63946'), 0, 0.25, 0), rot(mesh(cyl(0.252, 0.252, 0.12, 10), mat('#3a86ff'), 0, 0.25, 0), Math.PI / 2)),
+  bucket: () => G(mesh(cyl(0.2, 0.15, 0.32, 10), mat('#ffbe0b'), 0, 0.16, 0), rot(mesh(box(0.05, 0.3, 0.12), mat('#3a86ff'), 0.12, 0.35, 0), 0, 0, 0.4)),
+  // Volcano
+  banana: () => { const g = new THREE.Group(); for (let i = 0; i < 3; i++) g.add(rot(sc(mesh(cyl(0.05, 0.05, 0.42, 6), mat('#ffd23f'), -0.07 + i * 0.07, 0.12 + (i % 2) * 0.06, 0), 1, 1, 1), 0, 0, 1.2 - i * 0.2)); return g; },
+  mango: () => G(sc(mesh(sph(0.15, 8, 6), mat('#ff9f1c'), 0, 0.17, 0), 1.1, 1.15, 0.9), sc(mesh(sph(0.1, 6, 5), mat('#e63946'), 0.05, 0.22, 0), 1, 1, 0.95)),
+  coconut: () => G(mesh(sph(0.19, 8, 6), mat('#6b4226'), 0, 0.2, 0), mesh(sph(0.05, 5, 4), mat('#3e2a1e'), 0, 0.35, -0.1)),
+  torch: () => G(mesh(cyl(0.04, 0.05, 0.36, 6), mat('#8b5a2b'), 0, 0.18, 0), mesh(cyl(0.08, 0.06, 0.08, 6), mat('#4a3b35'), 0, 0.38, 0), mesh(cone(0.07, 0.16, 6), mat('#ff9f1c', { basic: true }), 0, 0.48, 0)),
+  rope: () => { const g = new THREE.Group(); for (let i = 0; i < 3; i++) g.add(rot(mesh(new THREE.TorusGeometry(0.17, 0.035, 5, 12), mat('#c9a35c'), 0, 0.05 + i * 0.08, 0), Math.PI / 2)); return g; },
+  map: () => G(rot(mesh(cyl(0.07, 0.07, 0.44, 8), mat('#f2e3b6'), 0, 0.08, 0), 0, 0, Math.PI / 2), rot(mesh(cyl(0.075, 0.075, 0.04, 8), mat('#c0392b'), 0, 0.08, 0), 0, 0, Math.PI / 2), mesh(box(0.3, 0.02, 0.2), mat('#f2e3b6'), 0, 0.17, 0)),
+  compass: () => G(mesh(cyl(0.16, 0.16, 0.08, 12), mat('#b08d57'), 0, 0.04, 0), mesh(cyl(0.13, 0.13, 0.02, 12), mat('#f4f1ea'), 0, 0.09, 0), rot(mesh(box(0.02, 0.01, 0.2), mat('#e63946'), 0, 0.1, 0), 0, 0.5)),
+  // Rainbow Road
+  rainbowcandy: () => G(rot(mesh(cyl(0.12, 0.12, 0.2, 10), mat('#ff4f6d'), 0, 0.12, 0), 0, 0, Math.PI / 2), rot(mesh(cyl(0.122, 0.122, 0.07, 10), mat('#3ddc84'), 0, 0.12, 0), 0, 0, Math.PI / 2), rot(mesh(cone(0.1, 0.12, 6), mat('#ffd23f'), 0.17, 0.12, 0), 0, 0, -Math.PI / 2), rot(mesh(cone(0.1, 0.12, 6), mat('#3fb6ff'), -0.17, 0.12, 0), 0, 0, Math.PI / 2)),
+  cupcake: () => G(mesh(cyl(0.15, 0.11, 0.18, 10), mat('#3fb6ff'), 0, 0.09, 0), mesh(sph(0.16, 8, 6), mat('#ff9ec4'), 0, 0.24, 0), mesh(sph(0.04, 5, 4), mat('#e63946'), 0, 0.38, 0)),
+  lollipop: () => G(mesh(cyl(0.015, 0.015, 0.3, 5), mat('#ffffff'), 0, 0.15, 0), rot(mesh(cyl(0.14, 0.14, 0.05, 12), mat('#8f6bff'), 0, 0.42, 0), Math.PI / 2), rot(mesh(cyl(0.09, 0.09, 0.055, 12), mat('#ffd23f'), 0, 0.42, 0), Math.PI / 2)),
+  cottoncandy: () => G(mesh(cyl(0.02, 0.02, 0.3, 5), mat('#ffffff'), 0, 0.15, 0), sc(mesh(sph(0.2, 8, 6), mat('#ffb3d9'), 0, 0.4, 0), 1, 1.1, 1)),
+  starcookie: () => { const g = new THREE.Group(); for (let i = 0; i < 5; i++) g.add(rot(mesh(box(0.08, 0.06, 0.22), mat('#f2c26b'), Math.sin(i * 1.257) * 0.08, 0.03, Math.cos(i * 1.257) * 0.08), 0, i * 1.257)); g.add(mesh(cyl(0.1, 0.1, 0.07, 10), mat('#f2c26b'), 0, 0.035, 0)); g.add(mesh(cyl(0.05, 0.05, 0.01, 10), mat('#ffd23f'), 0, 0.075, 0)); return g; },
+  cosmicmilk: () => G(mesh(box(0.22, 0.42, 0.22), mat('#2a1458'), 0, 0.21, 0), rot(mesh(box(0.16, 0.16, 0.23), mat('#8f6bff'), 0, 0.46, 0), 0, 0, Math.PI / 4), mesh(box(0.08, 0.08, 0.225), mat('#fff3b0', { basic: true }), 0, 0.25, 0)),
+  spacesoda: () => G(mesh(cyl(0.12, 0.12, 0.34, 10), mat('#3ddc84'), 0, 0.17, 0), mesh(cyl(0.05, 0.11, 0.12, 10), mat('#3ddc84'), 0, 0.4, 0), mesh(sph(0.06, 6, 4), mat('#ff4f6d'), 0, 0.48, 0)),
+  donut: () => G(rot(mesh(new THREE.TorusGeometry(0.14, 0.07, 6, 12), mat('#e9c46a'), 0, 0.08, 0), Math.PI / 2), rot(mesh(new THREE.TorusGeometry(0.14, 0.05, 6, 12), mat('#ff9ec4'), 0, 0.12, 0), Math.PI / 2)),
+});
+
+/** Each track's look for the three special things (the effect stays the same). */
+const SPECIAL_MAKERS = {
+  cheesewheel: () => G(mesh(cyl(0.36, 0.36, 0.42, 14), mat('#f4c430'), 0, 0.21, 0), mesh(cyl(0.365, 0.365, 0.06, 14), mat('#d9a520'), 0, 0.4, 0)),
+  bigmelon: () => G(sc(mesh(melonGeo, melonMat, 0, 0.4, 0), 1.15, 1.12, 1.15)),
+  bigcoconut: () => G(mesh(sph(0.36, 9, 7), mat('#6b4226'), 0, 0.36, 0), mesh(sph(0.07, 5, 4), mat('#3e2a1e'), 0, 0.62, -0.18), mesh(sph(0.07, 5, 4), mat('#3e2a1e'), 0.1, 0.62, -0.15)),
+  meteor: () => G(sc(mesh(sph(0.34, 6, 5), mat('#5a4a5e'), 0, 0.36, 0), 1.1, 1, 0.95), mesh(box(0.05, 0.3, 0.02), mat('#ff9f1c', { basic: true }), 0.1, 0.4, -0.32), mesh(box(0.25, 0.04, 0.02), mat('#ff9f1c', { basic: true }), -0.05, 0.3, -0.33)),
+  butter: () => G(mesh(box(0.4, 0.18, 0.24), mat('#fff1a8'), 0, 0.09, 0), mesh(box(0.41, 0.1, 0.245), mat('#ffffff'), 0, 0.06, 0), mesh(box(0.12, 0.06, 0.25), mat('#2a9d8f'), 0, 0.12, 0)),
+  suncream: () => G(mesh(cyl(0.12, 0.13, 0.42, 10), mat('#ff8c00'), 0, 0.21, 0), mesh(cyl(0.125, 0.125, 0.12, 10), mat('#ffffff'), 0, 0.22, 0), mesh(cyl(0.05, 0.05, 0.12, 8), mat('#ffd23f'), 0, 0.48, 0)),
+  bananapeel: () => { const g = new THREE.Group(); g.add(mesh(cyl(0.05, 0.06, 0.16, 6), mat('#ffd23f'), 0, 0.08, 0)); for (let i = 0; i < 3; i++) g.add(rot(mesh(box(0.08, 0.02, 0.28), mat('#ffd23f'), Math.sin(i * 2.1) * 0.12, 0.02, Math.cos(i * 2.1) * 0.12), 0, i * 2.1)); g.add(mesh(box(0.03, 0.06, 0.03), mat('#5c4033'), 0, 0.18, 0)); return g; },
+  jelly: () => G(mesh(cyl(0.22, 0.26, 0.3, 10), mat('#3ddc84', { opacity: 0.75 }), 0, 0.15, 0), mesh(cyl(0.2, 0.22, 0.08, 10), mat('#8f6bff', { opacity: 0.8 }), 0, 0.34, 0), mesh(sph(0.04, 5, 4), mat('#ff4f6d'), 0, 0.42, 0)),
+  honey: () => G(mesh(cyl(0.13, 0.13, 0.26, 10), mat('#f2a900', { opacity: 0.9 }), 0, 0.13, 0), mesh(cyl(0.14, 0.14, 0.06, 10), mat('#e63946'), 0, 0.28, 0)),
+  shells: () => G(mesh(box(0.5, 0.12, 0.3), mat('#c9a35c'), 0, 0.06, 0), ...[-0.15, 0, 0.15].map((x, i) => sc(mesh(cone(0.08, 0.14, 7), mat(['#ffd6e0', '#fff1d0', '#e0f0ff'][i]), x, 0.19, 0), 1, 1, 0.6))),
+  dinoeggs: () => G(mesh(cyl(0.3, 0.26, 0.1, 8), mat('#8b5a2b'), 0, 0.05, 0), ...[-0.12, 0.12].map((x) => sc(mesh(sph(0.11, 8, 6), mat('#cfe8c0'), x, 0.2, 0), 1, 1.35, 1)), mesh(sph(0.03, 5, 4), mat('#3e7b3a'), 0.12, 0.25, -0.1)),
+  crystals: () => { const g = new THREE.Group(); g.add(mesh(box(0.4, 0.08, 0.26), mat('#3a2a7a'), 0, 0.04, 0)); [[-0.1, 0.3, '#8f6bff', 0.2], [0.05, 0.36, '#3fb6ff', -0.1], [0.14, 0.26, '#ff9ec4', -0.3]].forEach(([x, h, c, r]) => g.add(rot(mesh(cone(0.07, h, 5), mat(c, { opacity: 0.85 }), x, 0.08 + h / 2, 0), 0, 0, r))); return g; },
+};
+
+/** A grabbable thing. it: { type, goods?, color?, look? } (look: how it looks on this track, src/catalog.js). */
 export function makeItem(it) {
   const g = new THREE.Group();
+  if (it.look && SPECIAL_MAKERS[it.look]) { g.add(SPECIAL_MAKERS[it.look]()); return g; }
   switch (it.type) {
     case 'melon': g.add(mesh(melonGeo, melonMat, 0, 0.36, 0)); break;
     case 'oil':

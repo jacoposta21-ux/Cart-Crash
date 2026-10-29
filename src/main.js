@@ -5,12 +5,13 @@ import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon, ca
 import { TRACKS, TRACK_ORDER } from './tracks.js';
 import { CARTS, CART_ORDER } from './carts.js';
 import { createProgress, mergeProgress, PROGRESS_KEYS, KEYS } from './progress.js';
+import { catalogOf, lookOfKey, GOODS_H } from './catalog.js';
 import { botSteer, POLICIES } from './bot.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
 import { portal } from './portal.js';
-import { ITEM_NAME, GOODS_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST, TRACK_NAME, CART_NAME, CHASER_CHIP, CHASER_TOAST, CROSSING_TOAST, FALL_TITLE, HIT_TITLE } from './strings.js';
+import { THING_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST, TRACK_NAME, CART_NAME, CHASER_CHIP, CHASER_TOAST, CROSSING_TOAST, FALL_TITLE, HIT_TITLE } from './strings.js';
 
 const PORTAL = BUILD.target !== 'web';
 const params = new URLSearchParams(location.search);
@@ -43,8 +44,10 @@ if (touchMode) document.documentElement.classList.add('touch');
 
 /** 83.4 → "1:23.4" */
 export const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
-const nameOf = (key) => t(GOODS_NAME[key] || ITEM_NAME[key] || key);
-const iconOf = (key) => (GOODS_NAME[key] ? itemIcon('goods', key) : itemIcon(key));
+// Names and icons follow the track: the heavy thing is a watermelon in the Old Town, a cheese wheel on the Mountain…
+const shopTrack = () => game?.track || pickTrack;
+const nameOf = (key) => t(THING_NAME[lookOfKey(shopTrack(), key)] || key);
+const iconOf = (key) => (GOODS_H[key] ? itemIcon('goods', key) : itemIcon(key, undefined, lookOfKey(shopTrack(), key)));
 
 // ---------- size ----------
 function resize() {
@@ -158,9 +161,9 @@ function pickTrackBy(d) {
 function renderHelp() {
   $('legend').replaceChildren(...LEGEND.map((type) => {
     const li = document.createElement('li');
-    const b = document.createElement('b'); b.textContent = t(ITEM_NAME[type]);
+    const b = document.createElement('b'); b.textContent = nameOf(type);
     const sp = document.createElement('span'); sp.textContent = t(ITEM_EFFECT[type]);
-    li.append(icon(itemIcon(type), 40), b, sp);
+    li.append(icon(iconOf(type), 40), b, sp);
     return li;
   }));
   $('rules').textContent = `${t('Fill the list to reach the checkout. Every extra thing in the cart adds 5 seconds. Stop at red lights and level crossings. Three crashes and you are out.')} ${t('Coins buy new carts in the garage. Finish a track to open the next one.')}`;
@@ -371,7 +374,7 @@ function showHint(text, ms = 3200) {
 function chip(type, text, warn) {
   const c = document.createElement('span');
   c.className = `chip${warn ? ' warn' : ''}`;
-  c.append(icon(itemIcon(type), 26), text);
+  c.append(icon(type === 'goods' ? itemIcon('goods', catalogOf(shopTrack()).goods[0]) : iconOf(type), 26), text);
   return c;
 }
 
@@ -479,7 +482,7 @@ function handleEvents(g, events, live) {
   for (const e of events) {
     audio.play(e);
     if (e.type === 'pickup' && !shownTips.has(e.item) && TIPS[e.item]) {
-      if (e.item !== 'goods' || g.stack.length > 3) { shownTips.add(e.item); showHint(t(TIPS[e.item])); }
+      if (e.item !== 'goods' || g.stack.length > 3) { shownTips.add(e.item); showHint(t(TIPS[e.item], { item: nameOf(e.item) })); }
     }
     if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list: +5 seconds at the checkout! Tap Drop to throw the top thing away.') : t('Not on the list: +5 seconds at the checkout! Press E to drop the top thing.'), 3800); }
     if (e.type === 'tall') toast(t('What a pile!'));

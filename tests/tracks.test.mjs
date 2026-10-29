@@ -311,3 +311,18 @@ test('rope bridges give way behind the cart: keep going and you are fine, stop a
   assert.ok(ev2.some((e) => e.type === 'falling' && e.into === 'chasm'));
   assert.ok(s.g.cart.y > s.b.end, 'put back after the bridge');
 });
+
+test('each track sells its own things: the list and the road come from its shops', async () => {
+  const { CATALOG, GOODS_H } = await import('../src/catalog.js');
+  for (const id of TRACK_ORDER) {
+    const shop = CATALOG[id].goods;
+    assert.equal(shop.length, 8);
+    for (const k of shop) assert.ok(GOODS_H[k], `${id}: ${k} has a height`);
+    for (let seed = 1; seed < 30; seed++) {
+      const g = createGame(seed, { track: id });
+      for (const l of g.list) assert.ok(['melon', 'oil', 'eggs', ...shop].includes(l.key), `${id}: ${l.key}`);
+      g.world.ensure(600);
+      for (const e of g.world.entities) if (e.kind === 'item' && e.type === 'goods') assert.ok(shop.includes(e.goods), `${id}: ${e.goods} on the road`);
+    }
+  }
+});

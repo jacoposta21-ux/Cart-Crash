@@ -1,13 +1,30 @@
 // Words the game shows for each thing and place (English keys for t()).
-export const ITEM_NAME = { goods: 'Groceries', melon: 'Watermelon', balloon: 'Balloons', oil: 'Olive oil', eggs: 'Eggs' };
-export const GOODS_NAME = { cereal: 'Cereal', roll: 'Toilet roll', can: 'Tomatoes', bread: 'Bread', cheese: 'Cheese', soda: 'Soda', pineapple: 'Pineapple', detergent: 'Detergent' };
+/** The name of every thing in the shops, by its look (src/catalog.js). */
+export const THING_NAME = {
+  goods: 'Groceries', balloon: 'Balloons',
+  // Old Town
+  melon: 'Watermelon', oil: 'Olive oil', eggs: 'Eggs',
+  cereal: 'Cereal', roll: 'Toilet roll', can: 'Tomatoes', bread: 'Bread', cheese: 'Cheese', soda: 'Soda', pineapple: 'Pineapple', detergent: 'Detergent', pasta: 'Pasta', coffee: 'Coffee',
+  // Mountain
+  cheesewheel: 'Cheese wheel', butter: 'Butter', honey: 'Honey jar',
+  apple: 'Apples', speck: 'Speck', cocoa: 'Hot chocolate', milk: 'Milk', ryebread: 'Rye bread', marshmallow: 'Marshmallows', firewood: 'Firewood', cookies: 'Cookies',
+  // Sea
+  bigmelon: 'Giant watermelon', suncream: 'Sun cream', shells: 'Seashells',
+  fish: 'Fish', shrimp: 'Prawns', lemon: 'Lemons', icepop: 'Ice lolly', icecream: 'Ice cream', beachball: 'Beach ball', bucket: 'Bucket and spade',
+  // Volcano
+  bigcoconut: 'Giant coconut', bananapeel: 'Banana peel', dinoeggs: 'Dinosaur eggs',
+  banana: 'Bananas', mango: 'Mango', coconut: 'Coconut', torch: 'Torch', rope: 'Rope', map: 'Treasure map', compass: 'Compass',
+  // Rainbow Road
+  meteor: 'Meteorite', jelly: 'Cosmic jelly', crystals: 'Star crystals',
+  rainbowcandy: 'Rainbow sweets', cupcake: 'Cupcake', lollipop: 'Lollipop', cottoncandy: 'Candy floss', starcookie: 'Star cookies', cosmicmilk: 'Cosmic milk', spacesoda: 'Space soda', donut: 'Doughnut',
+};
 export const ITEM_EFFECT = { melon: 'Heavy: slow to steer', balloon: 'Jump twice to glide', oil: 'Slippery for a while', goods: 'The pile wobbles', eggs: 'Break on bumps' };
 export const LEGEND = ['melon', 'balloon', 'oil', 'eggs'];
 export const TIPS = {
-  melon: 'Watermelon! The cart is heavier and slower to steer.',
+  melon: '{item}! The cart is heavier and slower to steer.',
   balloon: 'Balloons! Jump, then jump again in the air: you glide a long way. They do not count as extras.',
-  oil: 'Olive oil! Slippery for a few seconds.',
-  eggs: 'Eggs! They break on hard bumps.',
+  oil: '{item}! Slippery for a few seconds.',
+  eggs: '{item}! It breaks on hard bumps.',
   goods: 'Steer gently: the pile sways and things fall off.',
 };
 export const TRACK_NAME = { borgo: 'Old Town', montagna: 'Mountain', mare: 'Sea', vulcano: 'Volcano', arcobaleno: 'Rainbow Road' };

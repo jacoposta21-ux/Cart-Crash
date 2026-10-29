@@ -70,10 +70,16 @@ Ognuna aggiunge qualcosa di suo:
 |---|---|
 | 1. Borgo | semafori e vigile, cani, passaggio a livello col treno |
 | 2. Montagna | piste da sci con reti e bandierine, **palle di neve giganti** che ti rotolano dietro (non rallentare!), **trampolini** con le monete in aria, **lago ghiacciato** (si scivola sempre), sciatori, pupazzi di neve, **capre**, lo **spazzaneve** al posto del treno |
-| 3. Mare | **pontili senza bordi** (se cadi in acqua perdi una vita), **buchi** tra un pontile e l'altro da saltare (con la rampa), isole con spiaggia e capanne, **onde** che ti spingono di lato, **granchi**, **gabbiani che rubano** l'oggetto in cima alla pila, la **balena** al posto del treno |
-| 4. Vulcano | un **masso gigante** che ti rotola dietro per tutta la gara (se ti fermi ti schiaccia), **fiumi di lava** da saltare, **ponti di corda** stretti che oscillano, **geyser** che ti lanciano in aria, **scimmie che rubano** |
+| 3. Mare | **pontili senza bordi** (se cadi in acqua perdi una vita), **buchi** tra un pontile e l'altro da saltare (con la rampa), isole con spiaggia e capanne, **onde** che ti spingono di lato, **granchi**, **gabbiani che rubano** l'oggetto in cima alla pila, un'**onda gigante** al posto del treno |
+| 4. Vulcano | un **masso gigante** che ti rotola dietro per tutta la gara (se ti fermi ti schiaccia), **fiumi di lava** da saltare, **ponti di corda** stretti che oscillano e **crollano dietro di te** (se rallenti cadi), **geyser** che ti lanciano in aria, **scimmie che rubano** |
 | 5. Arcobaleno | pista sospesa nello spazio senza muri, **frecce turbo**, **blocchi che si muovono** da un lato all'altro |
 
+- **Ogni pista ha i suoi negozi** (`src/catalog.js`): 8 prodotti suoi più le sue
+  versioni delle tre cose speciali (pesante, scivolosa, fragile): anguria, olio e
+  uova nel Borgo; forma di formaggio, burro e miele in Montagna; cocomero
+  gigante, crema solare e conchiglie al Mare; noce di cocco gigante, buccia di
+  banana e uova di dinosauro nel Vulcano; meteorite, gelatina cosmica e
+  cristalli di stella sull'Arcobaleno.
 - **Monete** sulla strada (in fila e in aria): restano anche se la gara va male.
   Alla cassa c'è il bonus della pista (20, 35, 50, 70, 90); **la prima volta**
   che finisci una pista il premio è 100, 200, 300, 400 o 500 monete.

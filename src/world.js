@@ -7,10 +7,12 @@
 // the busier. Each track (src/tracks.js) picks its own mix.
 // Units are metres: x across the road, y down the road, elevation up.
 import { trackOf } from './tracks.js';
+import { catalogOf } from './catalog.js';
 
 export const STEP_LENGTH = 1.15; // one stair
 export const STEP_HEIGHT = 0.38;
-export const GOODS = ['cereal', 'roll', 'can', 'bread', 'cheese', 'soda', 'pineapple', 'detergent'];
+/** The Old Town's groceries (every track has its own: src/catalog.js). */
+export const GOODS = catalogOf('borgo').goods;
 
 /** Small fast seeded RNG (mulberry32). Returns a function giving [0, 1). */
 export function rng(seed) {
@@ -98,6 +100,7 @@ const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 /** wanted: keys of the things on the shopping list ('melon', 'eggs', 'oil' or a GOODS name). track: a TRACKS id. */
 export function createWorld(seed, { wanted = [], track = 'borgo' } = {}) {
   const T = trackOf(track);
+  const shop = catalogOf(track).goods;
   const r = rng(seed);
   const pick = (weights) => {
     const entries = Object.entries(weights).filter(([, w]) => w > 0);
@@ -187,8 +190,8 @@ export function createWorld(seed, { wanted = [], track = 'borgo' } = {}) {
   function itemSpec(kind, forced) {
     let key = forced;
     if (!key) key = world.wanted.length && r() < 0.68 ? world.wanted[Math.floor(r() * world.wanted.length)] : pick(itemWeights(kind));
-    if (key === 'goods') key = GOODS[Math.floor(r() * GOODS.length)];
-    if (GOODS.includes(key)) return { type: 'goods', goods: key };
+    if (key === 'goods') key = shop[Math.floor(r() * shop.length)];
+    if (shop.includes(key)) return { type: 'goods', goods: key };
     return key === 'balloon' ? { type: 'balloon', color: Math.floor(r() * 5) } : { type: key };
   }
   const obstacleFor = (kind) => {

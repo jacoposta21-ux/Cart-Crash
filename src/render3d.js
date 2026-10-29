@@ -12,6 +12,7 @@ import {
   makeAnimal, animateAnimal, makePlow, makeBigWave, makeRoller, makeHeart, makeWave,
 } from './models.js';
 import { buildBackdrop } from './town.js';
+import { lookOf } from './catalog.js';
 import { TRACKS } from './tracks.js';
 
 const VIEW_AHEAD = 115;
@@ -346,7 +347,7 @@ const stringMat = new THREE.LineBasicMaterial({ color: '#5a4e48' });
 function makeEntityObj(R, g, e) {
   const root = new THREE.Group();
   if (e.kind === 'item') {
-    const inner = makeItem(e);
+    const inner = makeItem({ ...e, look: lookOf(g.track, e) });
     if (e.type === 'balloon') {
       inner.position.y = 0.9;
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.05, 0), new THREE.Vector3(0, 0.9, 0)]), stringMat);
@@ -362,7 +363,7 @@ function makeEntityObj(R, g, e) {
     root.add(makeShadow(0.4), ring, inner, arrow);
     root.userData = { inner, ring, arrow };
   } else if (e.kind === 'dropped') {
-    const inner = makeItem(e.item);
+    const inner = makeItem({ ...e.item, look: lookOf(g.track, e.item) });
     inner.rotation.set(0.2, hashf(e.id, 4) * 6, 1.3);
     inner.position.y = 0.15;
     root.add(makeShadow(0.35), inner);
@@ -555,7 +556,7 @@ function syncCart(R, g, dt) {
   let base = 0;
   g.stack.forEach((it) => {
     let obj = R.pile.get(it);
-    if (!obj) { obj = makeItem(it); pile.add(obj); R.pile.set(it, obj); }
+    if (!obj) { obj = makeItem({ ...it, look: lookOf(g.track, it) }); pile.add(obj); R.pile.set(it, obj); }
     const jx = (hashf(it.id, 1) - 0.5) * 0.28, jz = (hashf(it.id, 2) - 0.5) * 0.4;
     const b = base;
     const lean = tilt + shiver;
@@ -945,8 +946,9 @@ function updateTexts(R, g, dt) {
 // ---------- icons (the same 3D models, rendered once to images) ----------
 const iconCache = new Map();
 let iconRenderer = null;
-export function itemIcon(type, goods = 'cereal') {
-  return icon(`${type}|${goods}`, () => makeItem({ type, goods, color: 0 }), 128, [1.2, 1.0, 3]);
+/** look: how a special thing looks on a track (src/catalog.js), e.g. 'cheesewheel' for the heavy one on the Mountain. */
+export function itemIcon(type, goods = 'cereal', look = null) {
+  return icon(`${type}|${goods}|${look}`, () => makeItem({ type, goods, color: 0, look }), 128, [1.2, 1.0, 3]);
 }
 
 /** A cart from the garage, seen from the front and a little to the side. */

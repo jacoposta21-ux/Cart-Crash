@@ -7,6 +7,7 @@
 // tests can drive whole rides.
 import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH, GOODS, LIGHT_STOP, LAUNCH } from './world.js';
 import { TRACKS } from './tracks.js';
+import { catalogOf, GOODS_H } from './catalog.js';
 import { CARTS } from './carts.js';
 
 export { GOODS };
@@ -19,8 +20,8 @@ export const ITEMS = {
   oil: { value: 20, weight: 0.45, h: 0.62 },
   eggs: { value: 40, weight: 0.15, h: 0.3 },
 };
-export const GOODS_H = { cereal: 0.62, roll: 0.46, can: 0.38, bread: 0.34, cheese: 0.32, soda: 0.56, pineapple: 0.62, detergent: 0.54 };
-export const itemHeight = (it) => (it.type === 'goods' ? GOODS_H[it.goods] : ITEMS[it.type].h);
+export { GOODS_H };
+export const itemHeight = (it) => (it.type === 'goods' ? GOODS_H[it.goods] ?? 0.4 : ITEMS[it.type].h);
 /** What a thing is called on the shopping list. */
 export const itemKey = (it) => (it.type === 'goods' ? it.goods : it.type);
 
@@ -83,12 +84,11 @@ const CATCH_GAP = 0.5;
 /** A fast cart shakes off whatever chases it sooner, a slow one later. */
 const chaseTime = (g, base) => base * Math.max(0.6, Math.min(1.4, 1 - 0.25 * g.K.speed));
 
-const LIST_POOL = ['melon', 'oil', 'eggs', ...GOODS];
 
-/** A shopping list: 4 different things, 2–3 of each (1–2 watermelons), about 9 in all. */
-export function makeList(seed, n = 4) {
+/** A shopping list from this track's shops: 4 different things, 2–3 of each (1–2 of the heavy one), about 9 in all. */
+export function makeList(seed, n = 4, track = 'borgo') {
   const r = rng(seed ^ 0x51ed27);
-  const pool = [...LIST_POOL];
+  const pool = ['melon', 'oil', 'eggs', ...catalogOf(track).goods];
   const list = [];
   while (list.length < n) {
     const key = pool.splice(Math.floor(r() * pool.length), 1)[0];
@@ -107,7 +107,7 @@ export function createGame(seed, opts = {}) {
   const cart = CARTS[opts.cart] ? opts.cart : 'classic';
   const T = TRACKS[track];
   const K = CARTS[cart];
-  const list = opts.list || makeList(seed, T.listSize);
+  const list = opts.list || makeList(seed, T.listSize, track);
   return {
     seed,
     list,
