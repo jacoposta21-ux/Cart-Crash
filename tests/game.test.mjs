@@ -278,11 +278,20 @@ test('watermelons make the steering slower', () => {
   assert.ok(heavy.cart.x - x1 < (plain.cart.x - x0) * 0.8);
 });
 
-test('balloons make the cart hop, and a hop clears a pothole', () => {
-  const g = emptyGame();
-  g.balloons.push({ color: 0 }, { color: 1 });
-  const ev = run(g, 4);
-  assert.ok(ev.filter((e) => e.type === 'hop').length >= 1);
+test('a balloon spent in the air makes a long glide; in the air a pothole does nothing', () => {
+  // compare how long the cart stays up, with and without a balloon spent at the top
+  const air = (balloons) => {
+    const g = emptyGame();
+    for (let i = 0; i < balloons; i++) g.balloons.push({ color: i });
+    run(g, 2);
+    step(g, DT, { jump: true });
+    let t = 0, used = false;
+    while (g.cart.z > 0 && t < 5) { const j = !used && g.cart.vz < 0; if (j) used = true; step(g, DT, { jump: j }); drainEvents(g); t += DT; }
+    return { t, left: g.balloons.length };
+  };
+  const plain = air(0), glide = air(1);
+  assert.ok(glide.t > plain.t * 1.8, `${plain.t} → ${glide.t}`);
+  assert.equal(glide.left, 0, 'the balloon is spent');
   const h = emptyGame();
   h.cart.z = 1; h.cart.vz = 2;
   put(h, { kind: 'obstacle', type: 'pothole', x: 0, y: h.cart.y + 0.3 });

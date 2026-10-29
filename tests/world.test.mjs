@@ -9,12 +9,13 @@ test('the same seed makes the same town', () => {
   assert.deepEqual(a.entities.map((e) => [e.kind, e.type, e.x, e.y]), b.entities.map((e) => [e.kind, e.type, e.x, e.y]));
 });
 
-test('the town goes on for ever, with every kind of section', () => {
+test('the town goes on for ever, with every kind of section of its track', () => {
   const w = createWorld(7);
   w.ensure(20000);
   assert.ok(w.made >= 20000);
   const kinds = new Set(w.sections.map((s) => s.kind));
-  for (const k of Object.keys(SECTION)) assert.ok(kinds.has(k), k);
+  for (const k of ['street', 'sidewalk', 'stairs', 'market']) assert.ok(kinds.has(k), k);
+  for (const k of kinds) assert.ok(SECTION[k], k);
   for (let i = 1; i < w.sections.length; i++) {
     assert.equal(w.sections[i].start, w.sections[i - 1].end);
     assert.notEqual(w.sections[i].kind, w.sections[i - 1].kind);

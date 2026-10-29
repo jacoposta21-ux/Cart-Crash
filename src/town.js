@@ -1,9 +1,12 @@
 // The static scenery around each section of road, built as one mesh per section
 // (vertex colours, flat shading): road, curbs, steps, houses with roofs,
 // shutters and washing, market stalls, trees, lamps and flower pots. Each
-// track has its theme: the Old Town, the Harbour (the sea on one side, with
-// boats), the Mountain (chalets, snow and pines) and the Rainbow Road (a
-// rainbow in space, with nothing at the sides).
+// track has its theme: the Old Town; the Mountain (chalets, ski slopes, a
+// frozen lake, snow and pines); the Sea (wooden piers over the water from
+// island to island, boats, beach huts); the Volcano (a jungle trail, rope
+// bridges over a chasm, lava in the gaps); the Rainbow Road (a rainbow in
+// space). Gaps in the road (src/world.js) are left open. buildBackdrop() makes
+// the far scenery: mountains, islands, the volcano.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { hash2, STEP_LENGTH } from './world.js';
 
@@ -16,17 +19,7 @@ const THEMES = {
     road: { street: '#5b5f6b', sidewalk: '#dcc9a5', stairs: '#d6c4a2', market: '#bba183' },
     band: { street: '#efe3cb', sidewalk: '#b8a382', stairs: '#c4ae8a', market: '#cdb593' },
     ground: '#e2d3b5', lawn: '#9fc46b', kerb: '#d7d1c3', stripe: '#d0bd9a', riser: '#a8957a', nose: '#efe4cc', stairWall: '#b9a27f',
-    stall: ['#ff6b35', '#ffd23f', '#7bc043', '#e63946', '#8f6bff'], flat: 0.3, washing: 0.22, tree: 'round', sea: 0,
-  },
-  harbour: {
-    walls: ['#f7d046', '#ef7f5f', '#f9b4a4', '#7fc8d6', '#f4a259', '#e9e4d0', '#c9e4a6', '#f28fad'],
-    roofs: ['#c8553d', '#b4472f', '#9e3d2a'],
-    shutters: ['#2f7d5b', '#1f5f8b', '#2f7d5b'],
-    awnings: ['#1f5f8b', '#3fa7d6', '#e63946', '#2a9d8f'],
-    road: { street: '#5d6470', sidewalk: '#b98d5f', stairs: '#cfc4b0', market: '#a9a59b' },
-    band: { street: '#d9d4c7', sidewalk: '#8a6440', stairs: '#bdb19b', market: '#c4bfb3' },
-    ground: '#cfc8b8', lawn: '#cfc8b8', kerb: '#d4cfc4', stripe: '#c4b8a2', riser: '#9c917e', nose: '#e6dfd0', stairWall: '#aaa08c',
-    stall: ['#c0d6e4', '#9fb7c8', '#e9edf0', '#ff8c69', '#5b7d99'], flat: 0.35, washing: 0, tree: 'palm', sea: 1,
+    stall: ['#ff6b35', '#ffd23f', '#7bc043', '#e63946', '#8f6bff'], flat: 0.3, washing: 0.22, tree: 'round',
   },
   alpine: {
     walls: ['#8b5a2b', '#a0632f', '#7a4a24', '#f1e6d0', '#b5763b'],
@@ -36,7 +29,7 @@ const THEMES = {
     road: { street: '#6f7884', sidewalk: '#e9f1f7', stairs: '#d8e2ea', market: '#c7cfd6' },
     band: { street: '#f4f8fb', sidewalk: '#c9d6e0', stairs: '#c3cfd9', market: '#e7eef4' },
     ground: '#f4f8fb', lawn: '#f4f8fb', kerb: '#dfe8ef', stripe: '#cbd6df', riser: '#9aa8b4', nose: '#f8fbfd', stairWall: '#b4c1cc',
-    stall: ['#c1121f', '#ffd23f', '#7bc043', '#f4f8fb', '#8b5a2b'], flat: 0, washing: 0, tree: 'pine', sea: 0,
+    stall: ['#c1121f', '#ffd23f', '#7bc043', '#f4f8fb', '#8b5a2b'], flat: 0, washing: 0, tree: 'pine',
   },
 };
 
@@ -101,6 +94,10 @@ export function makePoint(world) {
 export function buildSection(world, s) {
   const theme = world.track?.theme || 'town';
   if (theme === 'rainbow') return buildRainbow(world, s);
+  if (s.kind === 'slope' || s.kind === 'lake') return buildSnow(world, s);
+  if (s.kind === 'pier') return buildPier(world, s);
+  if (s.kind === 'island') return buildIsland(world, s);
+  if (s.kind === 'trail' || s.kind === 'bridge' || theme === 'jungle') return buildJungle(world, s);
   const P = THEMES[theme];
   const B = new Builder();
   const C = (y) => world.center(y), HW = (y) => world.halfWidth(y);
@@ -143,14 +140,7 @@ export function buildSection(world, s) {
       // kerb face, kerb top / sidewalk, then the ground out to the houses
       q(pt(a0, y0, e0), pt(a0, y0, e0, curb), pt(a1, y1, e1, curb), pt(a1, y1, e1), kind === 'street' ? P.kerb : P.band[kind]);
       q(pt(a0, y0, e0, curb), pt(b0, y0, e0, curb), pt(b1, y1, e1, curb), pt(a1, y1, e1, curb), P.band[kind]);
-      if (side === P.sea) {
-        // The quay, its edge, and the sea below.
-        const qa = c0 + side * (h0 + band + 3), qb = c1 + side * (h1 + band + 3);
-        const wa = c0 + side * (h0 + 60), wb = c1 + side * (h1 + 60);
-        q(pt(b0, y0, e0, curb), pt(qa, y0, e0, curb), pt(qb, y1, e1, curb), pt(b1, y1, e1, curb), P.ground);
-        q(pt(qa, y0, e0, curb), pt(qa, y0, e0, -1.6), pt(qb, y1, e1, -1.6), pt(qb, y1, e1, curb), '#8c8574');
-        q(pt(qa, y0, e0, -1.6), pt(wa, y0, e0, -1.6), pt(wb, y1, e1, -1.6), pt(qb, y1, e1, -1.6), Math.floor(y0 / 4.5) % 3 ? '#2f8fd1' : '#3aa0de');
-      } else q(pt(b0, y0, e0, curb), pt(f0, y0, e0, curb), pt(f1, y1, e1, curb), pt(b1, y1, e1, curb), kind === 'sidewalk' ? P.lawn : P.ground);
+      q(pt(b0, y0, e0, curb), pt(f0, y0, e0, curb), pt(f1, y1, e1, curb), pt(b1, y1, e1, curb), kind === 'sidewalk' ? P.lawn : P.ground);
       if (kind === 'stairs') {
         // the side walls of the stairs step down too
         const e2 = world.elevation(y1 + 0.01);
@@ -168,7 +158,6 @@ export function buildSection(world, s) {
     for (const side of [-1, 1]) {
       const h = hash2(k, side);
       const edge = (y, off) => C(y) + side * (HW(y) + off);
-      if (side === P.sea) { harbourSide(B, world, k, ya, yb, side, edge, kind === 'street' ? 0.14 : 0.35); continue; }
       const depth = 5 + h * 3;
       const floors = 2 + Math.floor(hash2(k, side * 5) * 3);
       const height = floors * 2.8 + 0.6;
@@ -327,34 +316,6 @@ function tree(B, style, x, y, z, k) {
   }
 }
 
-/** The sea side of the Harbour: bollards and lamps on the quay, boats on the water. */
-function harbourSide(B, world, k, ya, yb, side, edge, curb) {
-  const ym = (ya + yb) / 2;
-  const e = world.elevation(ym) + curb;
-  if (k % 2 === 0) {
-    const xb = edge(ym, 3.2);
-    B.box(xb, e, -ym, 0.35, 0.45, 0.35, '#3b3f4a');
-    B.box(xb, e + 0.45, -ym, 0.45, 0.1, 0.45, '#2b2e36');
-  } else {
-    const xl = edge(ym, 2.6);
-    B.box(xl, e, -ym, 0.12, 3.6, 0.12, '#2b2e36');
-    B.box(xl - side * 0.35, e + 3.5, -ym, 0.8, 0.1, 0.1, '#2b2e36');
-    B.box(xl - side * 0.7, e + 3.3, -ym, 0.3, 0.22, 0.3, '#ffe9a8');
-  }
-  if (hash2(k, 41) < 0.55) {
-    // A fishing boat: hull, cabin, mast and a sail.
-    const yy = ya + (yb - ya) * hash2(k, 42);
-    const water = world.elevation(yy) + curb - 1.6;
-    const xb = edge(yy, 5.5 + hash2(k, 43) * 6);
-    const hull = ['#e63946', '#1f5f8b', '#ffffff', '#f4a261', '#2a9d8f'][Math.floor(hash2(k, 44) * 5)];
-    B.box(xb, water - 0.3, -yy, 1.8, 0.8, 4.2, hull);
-    B.box(xb, water + 0.5, -yy, 1.9, 0.12, 4.3, '#f4f1ea');
-    B.box(xb, water + 0.55, -yy + 0.6, 1.2, 0.9, 1.3, '#f4f1ea');
-    B.box(xb, water + 0.55, -yy - 0.6, 0.1, 4.2, 0.1, '#6b4226');
-    B.quad([xb, water + 1.2, -yy - 0.65], [xb, water + 4.4, -yy - 0.65], [xb, water + 1.4, -yy - 2.4], [xb, water + 1.2, -yy - 2.4], hash2(k, 45) < 0.5 ? '#ffffff' : '#ffd23f');
-  }
-}
-
 // The Rainbow Road: unlit colours (it glows), bands across the road, a dark edge underneath.
 export const rainbowMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
 const RAINBOW = ['#ff4f6d', '#ff9f1c', '#ffd23f', '#3ddc84', '#3fb6ff', '#8f6bff'];
@@ -417,4 +378,276 @@ function buildRainbow(world, s) {
     }
   }
   return B.mesh(rainbowMaterial);
+}
+
+// ---------- the newer worlds: one road drawer, then each place's own scenery ----------
+
+/** Sample points along a section (each stair edge on stairs), with the gaps' edges added. */
+function samples(world, s, stepLen = 1.5) {
+  const ys = [];
+  if (s.kind === 'stairs') for (let k = 0; k <= s.steps; k++) ys.push(s.start + k * STEP_LENGTH);
+  else { for (let y = s.start; y < s.end; y += stepLen) ys.push(y); ys.push(s.end); }
+  const gaps = world.gapsIn(s.start, s.end);
+  for (const g of gaps) for (const y of [g.y, g.y + g.len]) if (y > s.start && y < s.end) ys.push(y);
+  ys.sort((a, b) => a - b);
+  return { ys: ys.filter((y, i) => i === 0 || y - ys[i - 1] > 0.01), gaps };
+}
+const inGap = (gaps, y0, y1) => gaps.some((g) => (y0 + y1) / 2 > g.y && (y0 + y1) / 2 < g.y + g.len);
+
+/**
+ * The road surface (with stairs and gaps), its two edges and the ground to the
+ * sides. color(i, y0) gives the road colour of a strip; side(B, pt, y0, y1, e0, e1, a, b, sideSign) draws the sides.
+ */
+function road(B, world, s, { color, edge = null, riser = '#9a8f80', step = 1.5, sideFn = null }) {
+  const { ys, gaps } = samples(world, s, step);
+  const stairs = s.kind === 'stairs';
+  const C = (y) => world.center(y), HW = (y) => world.halfWidth(y);
+  for (let i = 0; i < ys.length - 1; i++) {
+    const y0 = ys[i], y1 = ys[i + 1];
+    const e0 = stairs ? world.elevation(y0 + 0.01) : world.elevation(y0);
+    const e1 = stairs ? e0 : world.elevation(y1);
+    const pt = (x, y, e, h = 0) => [x, e + h, -y];
+    const c0 = C(y0), c1 = C(y1), h0 = HW(y0), h1 = HW(y1);
+    const gap = inGap(gaps, y0, y1);
+    if (!gap) {
+      B.quad(pt(c0 - h0, y0, e0), pt(c0 + h0, y0, e0), pt(c1 + h1, y1, e1), pt(c1 - h1, y1, e1), color(i, y0));
+      if (stairs) {
+        const e2 = world.elevation(y1 + 0.01);
+        if (y1 < s.end) B.quad(pt(c1 - h1, y1, e2), pt(c1 + h1, y1, e2), pt(c1 + h1, y1, e1), pt(c1 - h1, y1, e1), riser);
+      }
+      if (edge) for (const sd of [-1, 1]) {
+        // the edge of the deck, seen from the side
+        const a0 = c0 + sd * h0, a1 = c1 + sd * h1;
+        B.quad(pt(a0, y0, e0, 0.02), pt(a0, y0, e0, -0.35), pt(a1, y1, e1, -0.35), pt(a1, y1, e1, 0.02), edge);
+      }
+    }
+    if (sideFn) sideFn({ pt, y0, y1, e0, e1, c0, c1, h0, h1, gap, i });
+  }
+  return gaps;
+}
+
+/** Sea water: a wide plane below the road, in bands. */
+function water(B, a, y0, y1, e0, e1, depth = 1.6) {
+  const { c0, c1 } = a;
+  const col = Math.floor(y0 / 4.5) % 3 ? '#2f8fd1' : '#3aa0de';
+  B.quad([c0 - 70, e0 - depth, -y0], [c0 + 70, e0 - depth, -y0], [c1 + 70, e1 - depth, -y1], [c1 - 70, e1 - depth, -y1], col);
+}
+
+function boat(B, xb, water, yy, k) {
+  const hull = ['#e63946', '#1f5f8b', '#ffffff', '#f4a261', '#2a9d8f'][Math.floor(hash2(k, 44) * 5)];
+  B.box(xb, water - 0.3, -yy, 1.8, 0.8, 4.2, hull);
+  B.box(xb, water + 0.5, -yy, 1.9, 0.12, 4.3, '#f4f1ea');
+  B.box(xb, water + 0.55, -yy + 0.6, 1.2, 0.9, 1.3, '#f4f1ea');
+  B.box(xb, water + 0.55, -yy - 0.6, 0.1, 4.2, 0.1, '#6b4226');
+  B.quad([xb, water + 1.2, -yy - 0.65], [xb, water + 4.4, -yy - 0.65], [xb, water + 1.4, -yy - 2.4], [xb, water + 1.2, -yy - 2.4], hash2(k, 45) < 0.5 ? '#ffffff' : '#ffd23f');
+}
+
+/** The Sea: a wooden pier over the water (no rails: mind the edge), posts, boats and buoys. */
+function buildPier(world, s) {
+  const B = new Builder();
+  road(B, world, s, {
+    step: 0.75,
+    color: (i) => (i % 2 ? '#a9784a' : '#94673d'),
+    edge: '#5c3d22',
+    sideFn: (a) => {
+      water(B, a, a.y0, a.y1, a.e0, a.e1);
+      if (a.i % 4 === 0 && !a.gap) for (const sd of [-1, 1]) B.box(a.c0 + sd * (a.h0 + 0.12), a.e0 - 1.8, -a.y0, 0.24, 2.0, 0.24, '#5c3d22');
+    },
+  });
+  for (let k = Math.floor(s.start / 6.5); k * 6.5 < s.end; k++) {
+    const yy = k * 6.5 + 3;
+    if (yy < s.start || yy > s.end) continue;
+    const e = world.elevation(yy);
+    const side = hash2(k, 71) < 0.5 ? -1 : 1;
+    if (hash2(k, 72) < 0.35) boat(B, world.center(yy) + side * (world.halfWidth(yy) + 5 + hash2(k, 73) * 8), e - 1.6, yy, k);
+    else if (hash2(k, 74) < 0.5) {
+      const xb = world.center(yy) + side * (world.halfWidth(yy) + 3 + hash2(k, 75) * 5);
+      B.blob(xb, e - 1.5, -yy, 0.35, k % 2 ? '#e63946' : '#ffffff', 1.2);
+    }
+  }
+  return B.mesh(townMaterial);
+}
+
+/** The Sea: an island with a sandy road, the beach, palms, huts and umbrellas, then the water. */
+function buildIsland(world, s) {
+  const B = new Builder();
+  road(B, world, s, {
+    color: (i) => (i % 2 ? '#e8d3a2' : '#e2cb96'),
+    sideFn: (a) => {
+      const { pt, y0, y1, e0, e1, c0, c1, h0, h1 } = a;
+      for (const sd of [-1, 1]) {
+        const q = (p1, p2, p3, p4, col) => (sd < 0 ? B.quad(p2, p1, p4, p3, col) : B.quad(p1, p2, p3, p4, col));
+        q(pt(c0 + sd * h0, y0, e0), pt(c0 + sd * (h0 + 12), y0, e0, 0.02), pt(c1 + sd * (h1 + 12), y1, e1, 0.02), pt(c1 + sd * h1, y1, e1), '#f2dfb0');
+        q(pt(c0 + sd * (h0 + 12), y0, e0, 0.02), pt(c0 + sd * (h0 + 16), y0, e0, -1.2), pt(c1 + sd * (h1 + 16), y1, e1, -1.2), pt(c1 + sd * (h1 + 12), y1, e1, 0.02), '#d9c08a');
+      }
+      water(B, a, y0, y1, e0, e1, 1.0);
+    },
+  });
+  for (let k = Math.floor(s.start / 6.5); k * 6.5 < s.end; k++) {
+    const ya = Math.max(s.start, k * 6.5) + 0.5, yb = Math.min(s.end, (k + 1) * 6.5) - 0.5;
+    if (yb - ya < 2) continue;
+    for (const side of [-1, 1]) {
+      const h = hash2(k, side * 3);
+      const ym = (ya + yb) / 2;
+      const e = world.elevation(ym);
+      const edge = (y, off) => world.center(y) + side * (world.halfWidth(y) + off);
+      if (h < 0.4) tree(B, 'palm', edge(ym, 1.5 + h * 4), e, -ym, k);
+      else if (h < 0.7) {
+        // a beach hut with a thatched roof
+        const x = edge(ym, 3.5);
+        B.box(x, e, -ym, 2.6, 2.0, 3.0, ['#f4a261', '#3fa7d6', '#ffffff', '#e76f51'][k % 4]);
+        B.box(x, e + 2.0, -ym, 3.2, 0.5, 3.6, '#c9a35c');
+        B.box(x - side * 1.31, e, -ym, 0.04, 1.6, 0.9, '#6b4226');
+      } else if (h < 0.85) {
+        const x = edge(ym, 2.0);
+        B.box(x, e, -ym, 0.06, 2.0, 0.06, '#f4f1ea');
+        B.cone(x, e + 1.8, -ym, 1.0, 0.45, ['#e63946', '#3fa7d6', '#ffd166'][k % 3], 8);
+        B.box(x + 0.4, e + 0.02, -ym + 0.3, 0.7, 0.04, 1.6, '#ff8fab');
+      }
+    }
+  }
+  return B.mesh(townMaterial);
+}
+
+/** The Mountain: a ski slope or the frozen lake, snow banks, pines, fences and flags. */
+function buildSnow(world, s) {
+  const B = new Builder();
+  const lake = s.kind === 'lake';
+  road(B, world, s, {
+    color: (i) => (lake ? (i % 3 ? '#cfeaf7' : '#bfe1f2') : i % 2 ? '#f7fafd' : '#eef4fa'),
+    sideFn: (a) => {
+      const { pt, y0, y1, e0, e1, c0, c1, h0, h1, i } = a;
+      for (const sd of [-1, 1]) {
+        const q = (p1, p2, p3, p4, col) => (sd < 0 ? B.quad(p2, p1, p4, p3, col) : B.quad(p1, p2, p3, p4, col));
+        // a snow bank, then snowy ground out to the trees
+        q(pt(c0 + sd * h0, y0, e0), pt(c0 + sd * (h0 + 1.2), y0, e0, 0.7), pt(c1 + sd * (h1 + 1.2), y1, e1, 0.7), pt(c1 + sd * h1, y1, e1), '#e3edf5');
+        q(pt(c0 + sd * (h0 + 1.2), y0, e0, 0.7), pt(c0 + sd * (h0 + 30), y0, e0, 1.5), pt(c1 + sd * (h1 + 30), y1, e1, 1.5), pt(c1 + sd * (h1 + 1.2), y1, e1, 0.7), '#f4f8fb');
+        if (!lake && i % 2 === 0) B.box(c0 + sd * (h0 + 0.5), e0 + 0.35, -y0, 0.05, 0.9, 1.4, '#ff8c00'); // the orange safety net
+      }
+      if (lake && i % 5 === 2) B.quad(pt(c0 - h0 * 0.6, y0, e0, 0.01), pt(c0 + h0 * 0.2, y0, e0, 0.01), pt(c1 + h1 * 0.25, y1, e1, 0.01), pt(c1 - h1 * 0.55, y1, e1, 0.01), '#a9d4ea'); // a crack
+    },
+  });
+  for (let k = Math.floor(s.start / 6); k * 6 < s.end; k++) {
+    const yy = k * 6 + 3;
+    if (yy < s.start || yy > s.end) continue;
+    const e = world.elevation(yy);
+    for (const side of [-1, 1]) {
+      const h = hash2(k, side * 5);
+      const x = world.center(yy) + side * (world.halfWidth(yy) + 3 + h * 10);
+      if (h < 0.75) tree(B, 'pine', x, e + 1.0, -yy, k);
+      if (h > 0.9) {
+        // a little wooden hut
+        B.box(x, e + 1.0, -yy, 2.4, 1.8, 2.4, '#8b5a2b');
+        B.box(x, e + 2.8, -yy, 2.9, 0.45, 2.9, '#f7fbff');
+      }
+    }
+  }
+  return B.mesh(townMaterial);
+}
+
+/** The Volcano: a jungle trail (or temple steps), lava in the gaps, rope bridges over the chasm. */
+function buildJungle(world, s) {
+  const B = new Builder();
+  const bridge = s.kind === 'bridge';
+  const stairs = s.kind === 'stairs';
+  const gaps = road(B, world, s, {
+    step: bridge ? 0.6 : 1.5,
+    color: (i) => (bridge ? (i % 2 ? '#a9784a' : '#8d6238') : stairs ? (i % 2 ? '#9b948c' : '#8a837b') : i % 2 ? '#9b6b43' : '#916240'),
+    edge: bridge ? '#5c3d22' : null,
+    riser: '#6f6860',
+    sideFn: (a) => {
+      const { pt, y0, y1, e0, e1, c0, c1, h0, h1, gap, i } = a;
+      if (bridge) {
+        // ropes under the deck, posts at the sides, and far below the lava
+        if (i % 4 === 0) for (const sd of [-1, 1]) B.box(c0 + sd * (h0 + 0.08), e0 - 0.2, -y0, 0.14, 0.7, 0.14, '#5c3d22');
+        B.quad([c0 - 60, e0 - 16, -y0], [c0 + 60, e0 - 16, -y0], [c1 + 60, e1 - 16, -y1], [c1 - 60, e1 - 16, -y1], i % 3 ? '#ff6a00' : '#ff9a1f');
+        return;
+      }
+      for (const sd of [-1, 1]) {
+        const q = (p1, p2, p3, p4, col) => (sd < 0 ? B.quad(p2, p1, p4, p3, col) : B.quad(p1, p2, p3, p4, col));
+        // jungle floor rising a little at the sides
+        q(pt(c0 + sd * h0, y0, e0), pt(c0 + sd * (h0 + 1.5), y0, e0, 0.5), pt(c1 + sd * (h1 + 1.5), y1, e1, 0.5), pt(c1 + sd * h1, y1, e1), '#5a8f3c');
+        q(pt(c0 + sd * (h0 + 1.5), y0, e0, 0.5), pt(c0 + sd * (h0 + 30), y0, e0, 2), pt(c1 + sd * (h1 + 30), y1, e1, 2), pt(c1 + sd * (h1 + 1.5), y1, e1, 0.5), '#3e7b3a');
+      }
+      if (gap) {
+        // a lava river: the walls of the cut and the glowing lava below
+        for (const sd of [-1, 1]) B.quad(pt(c0 + sd * h0, y0, e0), pt(c0 + sd * h0, y0, e0, -2.4), pt(c1 + sd * h1, y1, e1, -2.4), pt(c1 + sd * h1, y1, e1), '#4a3b35');
+        B.quad(pt(c0 - h0 - 2, y0, e0, -2), pt(c0 + h0 + 2, y0, e0, -2), pt(c1 + h1 + 2, y1, e1, -2), pt(c1 - h1 - 2, y1, e1, -2), '#ff6a00');
+      }
+    },
+  });
+  for (const g of gaps) {
+    // the near and far walls of a lava cut
+    const e = world.elevation(g.y), e2 = world.elevation(g.y + g.len);
+    const c = world.center(g.y), c2 = world.center(g.y + g.len), h = world.halfWidth(g.y);
+    if (g.lava) {
+      B.quad([c - h, e, -g.y], [c + h, e, -g.y], [c + h, e - 2.4, -g.y], [c - h, e - 2.4, -g.y], '#4a3b35');
+      B.quad([c2 - h, e2, -g.y - g.len], [c2 + h, e2, -g.y - g.len], [c2 + h, e2 - 2.4, -g.y - g.len], [c2 - h, e2 - 2.4, -g.y - g.len], '#4a3b35');
+      B.quad([c - h, e - 2, -g.y], [c + h, e - 2, -g.y], [c2 + h, e2 - 2, -g.y - g.len], [c2 - h, e2 - 2, -g.y - g.len], '#ff8a1f');
+    }
+  }
+  if (!bridge) for (let k = Math.floor(s.start / 5); k * 5 < s.end; k++) {
+    const yy = k * 5 + 2.5;
+    if (yy < s.start || yy > s.end) continue;
+    const e = world.elevation(yy);
+    for (const side of [-1, 1]) {
+      const h = hash2(k, side * 9);
+      const x = world.center(yy) + side * (world.halfWidth(yy) + 2.5 + h * 6);
+      if (h < 0.55) {
+        // a jungle tree: tall trunk, big leaves
+        B.box(x, e, -yy, 0.4, 5 + h * 4, 0.4, '#5c4033');
+        B.blob(x, e + 5.5 + h * 4, -yy, 2.2, '#2f6b2f', 0.7);
+        B.blob(x + 1, e + 4.8 + h * 4, -yy + 0.8, 1.4, '#3f8f3a', 0.7);
+      } else if (h < 0.8) {
+        // ferns
+        for (let j = 0; j < 4; j++) B.blob(x + j * 0.5 - 1, e + 0.8, -yy + (j % 2) * 0.7, 0.9, j % 2 ? '#4f9a3a' : '#3e7b3a', 0.6);
+      } else if (stairs || h > 0.93) {
+        // temple ruins
+        B.box(x, e, -yy, 1.2, 3.2, 1.2, '#8a837b');
+        B.box(x, e + 3.2, -yy, 1.6, 0.4, 1.6, '#6f6860');
+      }
+    }
+  }
+  return B.mesh(townMaterial);
+}
+
+// ---------- far scenery, around the camera ----------
+const farMat = (c) => new THREE.MeshBasicMaterial({ color: c, fog: false });
+export function buildBackdrop(theme) {
+  const g = new THREE.Group();
+  const cone = (x, z, r, h, col, snow) => {
+    const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), farMat(col));
+    m.position.set(x, h / 2 - 30, z);
+    g.add(m);
+    if (snow) {
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(r * 0.38, h * 0.38, 7), farMat(snow));
+      cap.position.set(x, h - h * 0.19 - 30 + 0.5, z);
+      g.add(cap);
+    }
+  };
+  if (theme === 'alpine') {
+    for (let i = 0; i < 14; i++) {
+      const a = -Math.PI / 2 + (i - 6.5) * 0.24;
+      cone(Math.cos(a) * 280, Math.sin(a) * 280, 60 + (i * 37) % 50, 120 + (i * 53) % 90, i % 2 ? '#7f93ab' : '#6d829c', '#f7fbff');
+    }
+  } else if (theme === 'jungle') {
+    cone(40, -300, 160, 170, '#5a3d31');
+    const crater = new THREE.Mesh(new THREE.CylinderGeometry(22, 30, 8, 10), farMat('#ff6a00'));
+    crater.position.set(40, 136, -300);
+    g.add(crater);
+    for (let i = 0; i < 6; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(18 + i * 4, 8, 6), farMat(i % 2 ? '#7d6e66' : '#94857c'));
+      puff.position.set(40 + i * 9, 160 + i * 18, -300 - i * 6);
+      g.add(puff);
+    }
+    for (let i = 0; i < 8; i++) cone(-260 + i * 75, -250 - (i % 3) * 20, 50, 60 + (i % 3) * 25, '#3e6b34');
+  } else if (theme === 'sea') {
+    for (let i = 0; i < 6; i++) {
+      const isl = new THREE.Mesh(new THREE.SphereGeometry(40 + (i % 3) * 15, 10, 6), farMat(i % 2 ? '#5f9e57' : '#4f8a4a'));
+      isl.scale.set(1.6, 0.35, 1);
+      isl.position.set(-250 + i * 100, -32, -270 - (i % 2) * 30);
+      g.add(isl);
+    }
+  } else return null;
+  return g;
 }

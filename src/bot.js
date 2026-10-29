@@ -1,10 +1,11 @@
 // A simple driver for the menu's background ride, the trailer and the tests:
 // heads for what is still on the list and steers clear of the rest (extras cost
 // time at the checkout, so it drops any that land on top), swerves round obstacles and people, jumps the low ones, stops
-// at red lights and level crossings, and throws a treat to a dog that is
-// about to catch up.
+// at red lights and crossings, jumps gaps and waves (gliding with a balloon
+// when it must), keeps rolling with something on its heels, and throws a treat
+// to a dog that is about to catch up.
 import { OBSTACLES, JUMPABLE, LIGHT_STOP, RAIL_STOP } from './world.js';
-import { wanted, isNeeded, lightPhase } from './game.js';
+import { wanted, isNeeded, lightPhase, crossTime, RAIL_WARN } from './game.js';
 
 /**
  * opts.greedy: grab anything in reach and keep extras; opts.runReds: no stopping
@@ -68,7 +69,7 @@ export function botSteer(g, skill = 1, opts = {}) {
       const gap = e.y - LIGHT_STOP - c.y;
       if (gap > -0.3 && gap < (c.v * c.v) / 26 + 1.5) out.brake = true;
     }
-    if (e.kind === 'rail' && e.state === 'warn' && g.t - e.t0 < 2.4 + 3.4 + 0.4) {
+    if (e.kind === 'rail' && e.state === 'warn' && g.t - e.t0 < RAIL_WARN + crossTime(g, e) + 0.4) {
       const gap = e.y - RAIL_STOP - c.y;
       if (gap > -2 && gap < (c.v * c.v) / 26 + 2) out.brake = true;
     }
@@ -81,8 +82,25 @@ export function botSteer(g, skill = 1, opts = {}) {
       if (!isNeeded(g, top) || c.v < 6) out.drop = true;
     }
   }
-  // Red light already run: keep the speed up while the warden is after us.
-  if (g.cops.some((p) => p.state === 'chase')) out.brake = false;
+  // Gaps: aim for the ramp, or jump at the edge; over the gap and sinking, glide with a balloon.
+  const airborne = c.z > 0.02;
+  for (let i = Math.max(0, g.next - 3); i < ents.length && ents[i].y < c.y + 14; i++) {
+    const e = ents[i];
+    if (e.kind === 'gap') {
+      const tta = (e.y - c.y) / Math.max(c.v, 1);
+      const ramp = ents.find((q) => q.type === 'ramp' && q.y < e.y && q.y > e.y - 5);
+      if (ramp && tta > 0.4 && Math.abs(targetX - ramp.x) < 2.5) targetX = ramp.x;
+      if (!airborne && tta > 0 && tta < 0.12) out.jump = true;
+      if (airborne && c.vz < 0 && c.y > e.y - 1 && c.y < e.y + e.len && c.z < 1.2 && c.glide <= 0) out.jump = true;
+      if (tta > -0.5 && tta < 2) out.brake = false;
+    }
+    if (e.kind === 'wave' && e.going && !e.hit && !airborne) {
+      const tta = (e.y - c.y) / Math.max(c.v, 1);
+      if (tta > 0.12 && tta < 0.3 && Math.abs(e.x - c.x) < 3) out.jump = true;
+    }
+  }
+  // Red light already run, or something rolling after us: keep the speed up.
+  if (g.cops.some((p) => p.state === 'chase') || g.rollers.some((q) => q.gap < 12)) out.brake = false;
   // An extra on top of the pile: throw it away.
   const top = g.stack[g.stack.length - 1];
   if (!opts.greedy && top && !isNeeded(g, top) && !g.dogs.some((d) => d.state === 'chase')) out.drop = true;

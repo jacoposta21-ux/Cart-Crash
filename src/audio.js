@@ -99,7 +99,15 @@ export function play(e) {
     case 'crash': noise(0.3, { vol: 0.7, freq: 900 }); tone(110, 0.25, { type: 'sawtooth', vol: 0.2, slide: 0.5 }); break;
     case 'curb': noise(0.08, { vol: 0.35, freq: 600 }); break;
     case 'bump': if (e.cause === 'pothole') { noise(0.12, { vol: 0.6, freq: 400 }); tone(80, 0.15, { type: 'sine', vol: 0.4, slide: 0.6 }); } else if (e.cause === 'stairs') noise(0.05, { vol: 0.25, freq: 500 }); break;
-    case 'hop': tone(300, 0.18, { type: 'sine', vol: 0.12, slide: 2 }); break;
+    case 'glide': tone(400, 0.6, { type: 'sine', vol: 0.12, slide: 1.8 }); noise(0.4, { vol: 0.15, freq: 2000 }); break;
+    case 'heart': [659, 880, 1319].forEach((f, i) => tone(f, 0.14, { type: 'triangle', vol: 0.14, delay: i * 0.08 })); break;
+    case 'stolen': tone(900, 0.1, { type: 'square', vol: 0.1, slide: 1.6 }); tone(700, 0.2, { type: 'square', vol: 0.1, slide: 0.5, delay: 0.1 }); break;
+    case 'splash': noise(0.45, { vol: 0.55, freq: 1800 }); break;
+    case 'wave': noise(0.9, { vol: 0.3, freq: 700 }); break;
+    case 'roller': noise(1.4, { vol: 0.45, freq: 150 }); break;
+    case 'squashed': noise(0.5, { vol: 0.8, freq: 300 }); tone(90, 0.4, { type: 'sawtooth', vol: 0.2, slide: 0.5 }); break;
+    case 'boost': tone(300, 0.35, { type: 'sawtooth', vol: 0.12, slide: 3 }); break;
+    case 'skijump': case 'geyser': tone(220, 0.45, { type: 'square', vol: 0.1, slide: 3.2 }); if (e.type === 'geyser') noise(0.6, { vol: 0.35, freq: 2500 }); break;
     case 'coin': tone(1320, 0.06, { type: 'square', vol: 0.07 }); tone(1760, 0.12, { type: 'square', vol: 0.07, delay: 0.06 }); break;
     case 'falling': tone(700, 0.8, { type: 'triangle', vol: 0.16, slide: 0.15 }); break;
     case 'respawn': [392, 523].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.12, delay: i * 0.1 })); break;
@@ -117,7 +125,11 @@ export function play(e) {
     case 'copgaveup': [523, 784].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.12, delay: i * 0.1 })); break;
     case 'drop': tone(420, 0.12, { type: 'triangle', vol: 0.14, slide: 0.6 }); break;
     case 'yellow': [880, 880].forEach((f, i) => tone(f, 0.12, { type: 'square', vol: 0.09, delay: i * 0.18 })); break;
-    case 'bells': for (let i = 0; i < 8; i++) tone(i % 2 ? 1180 : 1320, 0.14, { type: 'triangle', vol: 0.16, delay: i * 0.3 }); break;
+    case 'bells':
+      if (e.vehicle === 'whale') { tone(110, 1.2, { type: 'sawtooth', vol: 0.16 }); tone(110, 1.2, { type: 'sawtooth', vol: 0.16, delay: 1.5 }); } // a foghorn
+      else if (e.vehicle === 'plow') [0, 0.5, 1.0].forEach((d) => tone(440, 0.3, { type: 'square', vol: 0.1, delay: d }));
+      else for (let i = 0; i < 8; i++) tone(i % 2 ? 1180 : 1320, 0.14, { type: 'triangle', vol: 0.16, delay: i * 0.3 });
+      break;
     case 'train': [196, 247, 196].forEach((f, i) => tone(f, 0.5, { type: 'sawtooth', vol: 0.18, delay: i * 0.08 })); noise(1.8, { vol: 0.35, freq: 300, delay: 0.3 }); break;
     case 'ranred': noise(0.6, { vol: 0.6, freq: 1200 }); [330, 262, 196].forEach((f, i) => tone(f, 0.18, { type: 'square', vol: 0.12, delay: i * 0.1 })); break;
     case 'bite': tone(600, 0.06, { type: 'sawtooth', vol: 0.2, slide: 0.4 }); noise(0.15, { vol: 0.5, freq: 1500, delay: 0.05 }); break;

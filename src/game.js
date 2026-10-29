@@ -5,7 +5,7 @@
 // track (src/tracks.js) sets the pace. Coins on the road are counted in
 // g.coins. step() is deterministic for a seed and a sequence of inputs, so
 // tests can drive whole rides.
-import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH, GOODS, LIGHT_STOP } from './world.js';
+import { createWorld, rng, OBSTACLES, SECTION, STEP_LENGTH, GOODS, LIGHT_STOP, LAUNCH } from './world.js';
 import { TRACKS } from './tracks.js';
 import { CARTS } from './carts.js';
 
@@ -28,8 +28,12 @@ export const RIM = 0.62; // the basket holds anything below this height
 export const MAX_PILE = 5.2; // higher than this, the top just slides off: there is no room
 export const CART_R = 0.45;
 export const LIVES = 3; // with the classic cart
-const FALL_TIME = 0.9; // off the Rainbow Road: how long the fall lasts before you are put back
+const FALL_TIME = 0.9; // off the edge or into a gap: how long the fall lasts before you are put back
 const ICE_TIME = 2.6;
+const GLIDE_TIME = 1.5; // a balloon spent in the air: a long, slow glide
+const BOOST_TIME = 1.4; // turbo arrows
+const BOOST_SPEED = 7;
+const HEART_COINS = 25; // a heart with every life still there
 export const JUMP_SPEED = 6.8;
 const GRAVITY = 21;
 const OIL_TIME = 3.2;
@@ -40,21 +44,39 @@ const CHECKOUT_AHEAD = 70;
 // Traffic lights: yellow, then red while a crowd crosses.
 export const YELLOW_TIME = 1.4;
 export const RED_TIME = 5.0;
-// Level crossings: bells and barriers, then the train goes by.
+// Crossings: a warning (bells, a horn), then something goes by: the train, the
+// snowplow, a whale. length and speed decide how long it takes.
 export const RAIL_WARN = 2.4;
-export const TRAIN_TIME = 3.4;
-export const TRAIN_LENGTH = 58;
-export const TRAIN_SPEED = 24;
-// Dogs.
-const DOG_SPEED = 10.5;
+export const VEHICLES = {
+  train: { length: 58, speed: 24 },
+  plow: { length: 7, speed: 10 },
+  whale: { length: 15, speed: 14 },
+};
+const vehicleOf = (e) => VEHICLES[e.vehicle] || VEHICLES.train;
+/** How long the thing takes to cross the road. */
+export const crossTime = (g, e) => (2 * (g.world.halfWidth(e.y) + 6) + 4 + vehicleOf(e).length) / vehicleOf(e).speed;
+// Animals that chase: how fast, and whether they bite (a life) or steal (the top of the pile).
+export const SPECIES = {
+  dog: { speed: 10.5, time: 12 },
+  goat: { speed: 11, time: 10 },
+  crab: { speed: 9.5, time: 9 },
+  gull: { speed: 13, time: 8, thief: true },
+  monkey: { speed: 12, time: 9, thief: true },
+};
 // The traffic warden: runs after you for 10 s when you run a red light.
 export const COP_SPEED = 11;
 export const COP_TIME = 10;
+// Things that roll down after you: a snowball now and then, the boulder all the way.
+export const ROLLERS = {
+  snowball: { start: 10, slack: 1.04, time: 8, r: 1.0 }, // a little faster than you: keep the speed up
+  boulder: { start: 26, slack: 0.97, time: Infinity, r: 1.6, max: 30 }, // a little slower: it gets you when you stop
+};
 // Chasers run beside the cart, just behind it, where the camera sees them.
 // They keep up with a cart that rolls on and catch one that slows down.
 export const CHASE_GAP = 2.4; // metres behind the cart at most
 const CATCH_GAP = 0.5;
-const DOG_TIME = 12;
+/** A fast cart shakes off whatever chases it sooner, a slow one later. */
+const chaseTime = (g, base) => base * Math.max(0.6, Math.min(1.4, 1 - 0.25 * g.K.speed));
 
 const LIST_POOL = ['melon', 'oil', 'eggs', ...GOODS];
 
@@ -104,7 +126,7 @@ export function createGame(seed, opts = {}) {
     checkoutY: null,
     next: 0, // first entity not yet behind the cart
     rand: rng(seed ^ 0x9e3779b9),
-    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, fall: 0, oil: 0, spin: 0, hopIn: 1.2, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false },
+    cart: { x: 0, y: 0, v: 0, vx: 0, z: 0, vz: 0, fall: 0, glide: 0, boost: 0, oil: 0, spin: 0, curbCd: 0, safe: 0, step: 0, flip: 0, braking: false, jumped: false },
     stack: [], // bottom first: { type, goods?, h, id }
     balloons: [], // { color }
     tilt: 0,
@@ -114,7 +136,8 @@ export function createGame(seed, opts = {}) {
     picked: 0,
     dropped: 0,
     lost: [], // items that fell off, broke, popped or were knocked out
-    dogs: [], // { x, y, gap, side, t, look, run, state: 'chase' | 'fetch' | 'eat' | 'leave', bit }
+    dogs: [], // { species, x, y, gap, side, t, look, run, state: 'chase' | 'fetch' | 'eat' | 'leave', bit }
+    rollers: T.roller === 'boulder' ? [{ type: 'boulder', gap: ROLLERS.boulder.start, t: 0, spin: 0, state: 'roll' }] : [], // { type, gap, t, spin, state: 'roll' | 'gone' }
     cops: [], // { x, y, gap, side, t, run, state: 'chase' | 'leave', caught }
     events: [],
   };
@@ -157,9 +180,7 @@ export function handling(g) {
   return {
     maxLat: (7.4 * g.K.steer) / (1 + 0.16 * melons),
     grip: (g.cart.oil > 0 ? 1.1 : 10 / (1 + 0.5 * melons)) * g.K.grip,
-    hopEvery: balloons ? Math.max(1.1, 2.9 - 0.3 * balloons) : 0,
-    hopPower: balloons ? (4.2 + 1.15 * Math.min(balloons, 6)) / Math.sqrt(mass(g)) : 0,
-    gravity: GRAVITY * Math.max(0.4, 1 - 0.09 * balloons),
+    gravity: GRAVITY * Math.max(0.4, 1 - 0.09 * balloons) * (g.cart.glide > 0 ? 0.2 : 1),
   };
 }
 
@@ -312,11 +333,12 @@ export function step(g, dt, input = 0) {
     if (c.fall > 0) { c.vz -= GRAVITY * dt; c.z += c.vz * dt; } else if (c.z > 0) { c.vz -= GRAVITY * dt; c.z = Math.max(0, c.z + c.vz * dt); }
     stepDogs(g, dt);
     stepCops(g, dt);
+    stepRollers(g, dt);
     return;
   }
   w.ensure(c.y + 160);
   if (c.fall > 0) {
-    // Off the edge of the Rainbow Road: down you go, then back on the road (a life less).
+    // Off the edge (or into a gap): down you go, then back on the road (a life less).
     c.fall += dt;
     c.vz -= GRAVITY * dt;
     c.z += c.vz * dt;
@@ -326,20 +348,25 @@ export function step(g, dt, input = 0) {
     if (c.fall > FALL_TIME) {
       if (loseLife(g, 'fall')) return;
       loseTop(g, 'fell');
-      c.fall = 0; c.z = 0; c.vz = 0; c.vx = 0; c.oil = 0;
+      c.fall = 0; c.z = 0; c.vz = 0; c.vx = 0; c.oil = 0; c.glide = 0;
+      // back on solid road: past the gap, in the middle
+      for (const gp of w.gapsIn(c.y - 1, c.y + 1)) c.y = gp.y + gp.len + 1;
       c.x = w.center(c.y);
       c.v = Math.min(c.v, 6);
+      c.safe = SAFE_TIME;
       emit(g, 'respawn', { lives: g.lives });
     }
     stepDogs(g, dt);
     stepCops(g, dt);
+    stepRollers(g, dt);
     return;
   }
   const hd = handling(g);
   const sec = w.sectionAt(c.y);
 
-  // Downhill, unless braking.
-  const target = targetSpeed(g, sec.kind);
+  // Downhill, unless braking (turbo arrows give a burst).
+  c.boost = Math.max(0, c.boost - dt);
+  const target = targetSpeed(g, sec.kind) + (c.boost > 0 ? BOOST_SPEED : 0);
   c.braking = Boolean(inp.brake);
   if (c.braking) c.v = Math.max(0, c.v - BRAKE * (c.z <= 0.02 ? 1 : 0.5) * dt);
   else c.v += (target - c.v) * Math.min(1, (c.v < 5 ? 1.6 : 1.1) * dt);
@@ -367,7 +394,14 @@ export function step(g, dt, input = 0) {
     c.vz = JUMP_SPEED;
     c.z = 0.03;
     emit(g, 'jump', {});
+  } else if (inp.jump && airborne && g.balloons.length && c.glide <= 0) {
+    // A balloon spent: glide a long way (over gaps, water, lava).
+    const b = g.balloons.pop();
+    c.glide = GLIDE_TIME;
+    c.vz = Math.max(c.vz, 2.5);
+    emit(g, 'glide', { color: b.color });
   }
+  if (c.glide > 0) c.glide = c.z > 0 ? c.glide - dt : 0;
   if (c.z > 0 || c.vz > 0) {
     c.vz -= hd.gravity * dt;
     c.z += c.vz * dt;
@@ -376,13 +410,6 @@ export function step(g, dt, input = 0) {
       c.z = 0; c.vz = 0;
       emit(g, 'land', { impact });
       if (impact > 3) jolt(g, Math.min(1.1, (impact - 3) * 0.12 + 0.2), 'land');
-    }
-  } else if (hd.hopEvery) {
-    c.hopIn -= dt;
-    if (c.hopIn <= 0) {
-      c.vz = hd.hopPower;
-      c.hopIn = hd.hopEvery;
-      emit(g, 'hop', {});
     }
   }
   if (inp.drop) drop(g);
@@ -396,15 +423,19 @@ export function step(g, dt, input = 0) {
   c.safe -= dt;
   const cx = w.center(c.y);
   const lim = w.halfWidth(c.y) - CART_R;
-  if (g.T.void) {
-    // No walls on the Rainbow Road: over the edge, the cart falls.
-    if (Math.abs(c.x - cx) > w.halfWidth(c.y) + 0.1 && c.z <= 0.02) {
-      c.fall = 0.001;
-      c.vz = 0;
-      emit(g, 'falling', {});
-      return;
-    }
-  } else if (Math.abs(c.x - cx) > lim) {
+  // No road under the wheels (off a pier, a rope bridge, the rainbow, or into a gap): the cart falls.
+  const inGap = c.z <= 0.02 && w.gapsIn(c.y, c.y + 0.01).length > 0;
+  if (inGap || (w.isVoid(c.y) && Math.abs(c.x - cx) > w.halfWidth(c.y) + 0.1 && c.z <= 0.02)) {
+    c.fall = 0.001;
+    c.vz = 0;
+    const kind = sec.kind;
+    g.fellInto = inGap ? (w.gapsIn(c.y, c.y + 0.01)[0].lava ? 'lava' : 'water') : g.T.void ? 'space' : kind === 'bridge' ? 'chasm' : 'water';
+    emit(g, 'falling', { into: g.fellInto });
+    return;
+  }
+  if (SECTION[sec.kind].sway) c.x += Math.sin(g.t * 1.7 + sec.start) * 0.9 * dt; // the rope bridge swings
+  if (SECTION[sec.kind].ice) c.oil = Math.max(c.oil, 0.3); // a frozen lake
+  if (!w.isVoid(c.y) && Math.abs(c.x - cx) > lim) {
     const side = Math.sign(c.x - cx);
     c.x = cx + side * lim;
     if (c.curbCd <= 0 && Math.abs(c.vx) > 1.2) {
@@ -450,12 +481,37 @@ export function step(g, dt, input = 0) {
     } else if (e.kind === 'dog' && !e.chased && c.y > e.y + 1.5) {
       e.chased = true;
       const side = Math.sign(e.x - w.center(e.y)) || 1;
-      g.dogs.push({ x: e.x, y: e.y, gap: CHASE_GAP, side, t: 0, look: e.look, run: 0, state: 'chase' });
-      emit(g, 'dog', {});
+      const species = SPECIES[e.species] ? e.species : 'dog';
+      g.dogs.push({ species, x: e.x, y: e.y, gap: CHASE_GAP, side, t: 0, look: e.look, run: 0, state: 'chase', time: chaseTime(g, SPECIES[species].time) });
+      emit(g, 'dog', { species });
+    } else if (e.kind === 'roller' && !e.started && c.y > e.y) {
+      e.started = true;
+      if (!g.rollers.some((q) => q.state === 'roll')) {
+        g.rollers.push({ type: e.type, gap: ROLLERS[e.type].start, t: 0, spin: 0, state: 'roll', time: chaseTime(g, ROLLERS[e.type].time) });
+        emit(g, 'roller', { roller: e.type });
+      }
+    } else if (e.kind === 'wave') {
+      // it sets off so as to reach the middle of the pier just as the cart gets there
+      if (!e.going && e.y > c.y && (e.y - c.y) / Math.max(c.v, 3) < (w.halfWidth(e.y) + 2) / 7) { e.going = true; e.t0 = g.t; emit(g, 'wave', {}); }
+      if (e.going && !e.done) {
+        // It rolls across from one side to the other at 7 m/s and shoves what it meets.
+        const hw = w.halfWidth(e.y) + 2;
+        e.x = w.center(e.y) - e.side * hw + e.side * 7 * (g.t - e.t0);
+        if (Math.abs(e.x - w.center(e.y)) > hw + 0.5 && g.t - e.t0 > 0.5) e.done = true;
+        if (!e.hit && Math.abs(c.y - e.y) < 1.1 && Math.abs(c.x - e.x) < 0.9 && c.z < 0.5) {
+          e.hit = true;
+          c.vx = e.side * 7.5;
+          jolt(g, 0.5, 'wave');
+          emit(g, 'splash', { x: c.x, y: c.y });
+        }
+      }
+    } else if (e.type === 'block' && e.move) {
+      e.x = e.x0 + Math.sin(g.t * e.freq + e.phase) * e.move;
     }
   }
   stepDogs(g, dt);
   stepCops(g, dt);
+  stepRollers(g, dt);
   if (g.over) return;
 
   // What the cart touches.
@@ -468,6 +524,13 @@ export function step(g, dt, input = 0) {
         e.taken = true;
         g.coins++;
         emit(g, 'coin', { x: e.x, y: e.y, h: e.h });
+      }
+      continue;
+    }
+    if (e.kind === 'heart') {
+      if (dx * dx + dyy * dyy < 0.8 * 0.8 && c.z < 1.2) {
+        e.taken = true;
+        if (g.lives < g.maxLives) { g.lives++; emit(g, 'heart', { x: e.x, y: e.y, lives: g.lives }); } else { g.coins += HEART_COINS; emit(g, 'heart', { x: e.x, y: e.y, coins: HEART_COINS }); }
       }
       continue;
     }
@@ -487,12 +550,15 @@ export function step(g, dt, input = 0) {
       if (g.over) return;
       continue;
     }
+    if (e.type === 'geyser' && !geyserUp(g, e)) continue; // it only throws you up when it blows
     if (e.used) continue;
     e.used = true;
+    if (LAUNCH[e.type]) { c.vz = LAUNCH[e.type]; c.z = 0.03; emit(g, e.type === 'ramp' ? 'ramp' : e.type, {}); continue; }
+    if (e.type === 'boost') { c.boost = BOOST_TIME; c.v += 4; emit(g, 'boost', {}); continue; }
     if (e.type === 'pothole') jolt(g, 0.75, 'pothole');
     else if (e.type === 'puddle') { c.oil = Math.max(c.oil, PUDDLE_TIME); emit(g, 'slip', {}); }
     else if (e.type === 'ice') { c.oil = Math.max(c.oil, ICE_TIME); emit(g, 'slip', { ice: true }); }
-    else if (e.type === 'ramp') { c.vz = 8.4; c.z = 0.03; emit(g, 'ramp', {}); }
+
   }
 
   // The pile: a spring that sways with the steering and topples when it leans too far.
@@ -612,11 +678,12 @@ function stepLight(g, e) {
 export function trainSpan(g, e) {
   if (e.state !== 'warn') return null;
   const t = g.t - e.t0 - RAIL_WARN;
-  if (t < 0 || t > TRAIN_TIME + 1) return null;
+  const V = vehicleOf(e);
+  if (t < 0 || t > crossTime(g, e) + 1) return null;
   const hw = g.world.halfWidth(e.y) + 6;
   const start = e.x - e.dir * (hw + 4);
-  const front = start + e.dir * TRAIN_SPEED * t;
-  const back = front - e.dir * TRAIN_LENGTH;
+  const front = start + e.dir * V.speed * t;
+  const back = front - e.dir * V.length;
   return { front, back, min: Math.min(front, back), max: Math.max(front, back) };
 }
 
@@ -629,21 +696,24 @@ function stepRail(g, e) {
       e.state = 'warn';
       e.t0 = g.t;
       e.dir = g.rand() < 0.5 ? -1 : 1;
-      emit(g, 'bells', { y: e.y });
+      emit(g, 'bells', { y: e.y, vehicle: e.vehicle || 'train' });
     }
   }
   if (e.state === 'warn') {
     const t = g.t - e.t0;
     if (!e.trainSaid && t > RAIL_WARN - 0.4) { e.trainSaid = true; emit(g, 'train', { y: e.y }); }
-    if (t > RAIL_WARN + TRAIN_TIME + 1.2) e.state = 'done';
+    if (t > RAIL_WARN + crossTime(g, e) + 1.2) e.state = 'done';
     const span = trainSpan(g, e);
-    if (span && Math.abs(c.y - e.y) < 1.7 && c.x > span.min - 0.6 && c.x < span.max + 0.6) {
+    if (span && Math.abs(c.y - e.y) < 1.7 && c.x > span.min - 0.6 && c.x < span.max + 0.6 && c.z < 2) {
       c.v = 0;
-      gameOver(g, 'train', 'train');
+      g.hitBy = e.vehicle || 'train';
+      gameOver(g, 'train', g.hitBy);
     }
   }
 }
-export const railBarrierDown = (g, e) => e.state === 'warn' && g.t - e.t0 < RAIL_WARN + TRAIN_TIME + 0.6;
+export const railBarrierDown = (g, e) => e.state === 'warn' && g.t - e.t0 < RAIL_WARN + crossTime(g, e) + 0.6;
+/** Is the geyser blowing right now? (1.3 s in every 3.2) */
+export const geyserUp = (g, e) => ((g.t + e.phase) % 3.2) < 1.3;
 
 // ---------- dogs ----------
 /**
@@ -681,10 +751,20 @@ function stepDogs(g, dt) {
       // A treat on the road beats a cart.
       const treat = g.world.entities.find((e) => e.kind === 'dropped' && !e.eaten && e.y < c.y && e.y > d.y - 2);
       if (treat) { d.state = 'fetch'; d.target = treat; continue; }
-      if (chase(g, d, DOG_SPEED, dt)) { d.state = 'leave'; d.bit = true; caught(g, 'bite'); } else if (d.t > DOG_TIME) d.state = 'leave';
+      const S = SPECIES[d.species] || SPECIES.dog;
+      if (chase(g, d, S.speed, dt)) {
+        d.state = 'leave';
+        if (S.thief) {
+          // A gull or a monkey snatches the top of the pile and is off with it.
+          const it = g.stack.length ? loseTop(g, 'stolen', d.side) : null;
+          d.stole = it;
+          emit(g, 'stolen', { species: d.species, item: it });
+        } else { d.bit = true; caught(g, 'bite'); }
+      } else if (d.t > (d.time ?? S.time)) d.state = 'leave';
     } else if (d.state === 'fetch') {
       const treat = d.target;
-      d.y += Math.max(-DOG_SPEED * dt, Math.min(DOG_SPEED * dt, treat.y - d.y));
+      const sp = (SPECIES[d.species] || SPECIES.dog).speed;
+      d.y += Math.max(-sp * dt, Math.min(sp * dt, treat.y - d.y));
       d.x += (treat.x - d.x) * Math.min(1, dt * 4);
       if (Math.abs(treat.y - d.y) < 0.4) { d.state = 'eat'; d.eatT = 0; treat.eaten = true; emit(g, 'dogeats', {}); }
     } else if (d.state === 'eat') {
@@ -704,9 +784,42 @@ function stepCops(g, dt) {
     p.t += dt;
     p.run += dt;
     if (p.state !== 'chase') continue;
-    if (chase(g, p, COP_SPEED, dt)) { p.state = 'leave'; p.caught = true; caught(g, 'caught'); } else if (p.t > COP_TIME) { p.state = 'leave'; emit(g, 'copgaveup', {}); }
+    if (chase(g, p, COP_SPEED, dt)) { p.state = 'leave'; p.caught = true; caught(g, 'caught'); } else if (p.t > chaseTime(g, COP_TIME)) { p.state = 'leave'; emit(g, 'copgaveup', {}); }
   }
   g.cops = g.cops.filter((p) => p.y > c.y - 45);
+}
+
+// ---------- snowballs and the boulder ----------
+/**
+ * They roll down behind the cart at about its usual speed (a snowball a little
+ * faster, the boulder a little slower): brake, crash or fall and they catch up.
+ * Caught: a crash (a life). The boulder then drops back and keeps coming.
+ */
+function stepRollers(g, dt) {
+  const c = g.cart;
+  for (const q of g.rollers) {
+    if (q.state !== 'roll') continue;
+    const R = ROLLERS[q.type];
+    q.t += dt;
+    const cruise = targetSpeed(g, g.world.sectionAt(c.y).kind);
+    // (the boulder starts with the race, from a standstill; a snowball comes down already rolling)
+    const v = q.type === 'boulder' ? Math.min(cruise * R.slack, 4 + 4 * q.t) : cruise * R.slack;
+    q.gap = Math.min(R.max ?? 99, q.gap + (c.v - v) * dt);
+    q.spin += v * dt / R.r;
+    if (g.over) continue;
+    if (q.gap < R.r * 0.6 && c.fall <= 0) {
+      emit(g, 'squashed', { roller: q.type, lives: g.lives - 1 });
+      if (c.safe <= 0) loseLife(g, q.type);
+      c.safe = Math.max(c.safe, SAFE_TIME);
+      if (g.over) continue;
+      jolt(g, 0.9, 'crash');
+      if (q.type === 'boulder') q.gap = 18; else q.state = 'gone';
+    } else if (q.t > (q.time ?? R.time)) {
+      q.state = 'gone';
+      emit(g, 'rollergone', { roller: q.type });
+    }
+  }
+  g.rollers = g.rollers.filter((q) => q.state === 'roll');
 }
 
 /** Pops this step's events (for sound and effects). */

@@ -114,8 +114,9 @@ html, body {
 .pick-card b { font-family: var(--display); font-weight: 400; font-size: 1.35rem; line-height: 1.1; text-shadow: 0 2px 0 rgba(29, 35, 64, 0.35); }
 .pick-card span { font-weight: 800; font-size: 0.85rem; line-height: 1.2; }
 .pick-card span b { font-family: var(--body); font-size: inherit; font-weight: 900; text-shadow: none; }
-.pick-card[data-track='porto'] { background: linear-gradient(135deg, #3fa7d6, #1f5f8b); }
 .pick-card[data-track='montagna'] { background: linear-gradient(135deg, #8fb8d8, #4a6d8c); }
+.pick-card[data-track='mare'] { background: linear-gradient(135deg, #3fa7d6, #1f5f8b); }
+.pick-card[data-track='vulcano'] { background: linear-gradient(135deg, #ff7b00, #8b2e16); }
 .pick-card[data-track='arcobaleno'] { background: linear-gradient(90deg, #ff4f6d, #ff9f1c, #ffd23f, #3ddc84, #3fb6ff, #8f6bff); }
 .pick-card.locked { filter: grayscale(0.85) brightness(0.85); }
 .pick-card.locked > b::before { content: '\1F512  '; font-size: 0.9em; }

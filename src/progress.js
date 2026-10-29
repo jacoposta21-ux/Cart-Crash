@@ -11,11 +11,12 @@ export const KEYS = {
   cart: 'cartcrash:cart',
   unlocked: 'cartcrash:unlocked', // how many tracks are open (1..4)
   track: 'cartcrash:track',
+  won: 'cartcrash:won', // tracks finished at least once
 };
 /** The Old Town keeps the key it always had. */
 export const bestKey = (track) => (track === 'borgo' ? 'cartcrash:bestScore' : `cartcrash:best:${track}`);
 /** Every key worth a cloud save. */
-export const PROGRESS_KEYS = [KEYS.coins, KEYS.carts, KEYS.cart, KEYS.unlocked, KEYS.track, ...TRACK_ORDER.map(bestKey)];
+export const PROGRESS_KEYS = [KEYS.coins, KEYS.carts, KEYS.cart, KEYS.unlocked, KEYS.track, KEYS.won, ...TRACK_ORDER.map(bestKey)];
 
 export function createProgress(store) {
   const P = {
@@ -48,6 +49,14 @@ export function createProgress(store) {
       store.save(KEYS.unlocked, next + 1);
       return TRACK_ORDER[next];
     },
+    /** The first win on a track: true once (the big reward), then false. */
+    firstWin(id) {
+      const won = store.load(KEYS.won, []);
+      const list = Array.isArray(won) ? won : [];
+      if (list.includes(id)) return false;
+      store.save(KEYS.won, [...list, id]);
+      return true;
+    },
     best: (id) => { const b = store.load(bestKey(id), null); return typeof b === 'number' ? b : null; },
     setBest(id, total) { store.save(bestKey(id), total); },
   };
@@ -65,6 +74,10 @@ export function mergeProgress(local, cloud) {
   if (Array.isArray(cloud[KEYS.carts])) {
     const all = [...new Set([...(Array.isArray(local[KEYS.carts]) ? local[KEYS.carts] : []), ...cloud[KEYS.carts]])].filter((id) => CARTS[id]);
     if (all.length > (Array.isArray(local[KEYS.carts]) ? local[KEYS.carts].length : 0)) out[KEYS.carts] = all;
+  }
+  if (Array.isArray(cloud[KEYS.won])) {
+    const all = [...new Set([...(Array.isArray(local[KEYS.won]) ? local[KEYS.won] : []), ...cloud[KEYS.won]])].filter((id) => TRACKS[id]);
+    if (all.length > (Array.isArray(local[KEYS.won]) ? local[KEYS.won].length : 0)) out[KEYS.won] = all;
   }
   if (num(cloud[KEYS.unlocked]) !== null && cloud[KEYS.unlocked] > (num(local[KEYS.unlocked]) ?? 1)) out[KEYS.unlocked] = cloud[KEYS.unlocked];
   for (const id of TRACK_ORDER) {

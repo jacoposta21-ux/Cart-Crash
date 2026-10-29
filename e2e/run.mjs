@@ -194,8 +194,8 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   await page.screenshot({ path: join(SHOTS, `${name}-win.png`) });
   await audit(page, `${name} win`);
   const prog = await page.evaluate(() => ({ coins: Number(localStorage.getItem('cartcrash:coins')), unlocked: Number(localStorage.getItem('cartcrash:unlocked')), badge: !document.querySelector('#end-unlock').hidden }));
-  check(prog.coins >= 20, `${name}: coins saved, with the checkout bonus (${prog.coins})`);
-  check(prog.unlocked === 2 && prog.badge, `${name}: finishing the Old Town opens the Harbour`);
+  check(prog.coins >= 120, `${name}: coins saved, with the checkout bonus and the first-win reward (${prog.coins})`);
+  check(prog.unlocked === 2 && prog.badge, `${name}: finishing the Old Town opens the Mountain`);
   await page.click('#btn-again');
   await page.evaluate(() => window.__cc.pause());
   await page.click('#btn-quit');
@@ -306,7 +306,7 @@ log('\n▶ coins, garage and tracks');
   const ls = (k) => page.evaluate((key) => localStorage.getItem(key), k);
   // Locked tracks can be looked at but not played.
   await page.click('#track-next');
-  check((await page.textContent('#track-name')).includes('Harbour') && await page.evaluate(() => document.querySelector('#btn-play').disabled), 'tracks: the Harbour is locked at first');
+  check((await page.textContent('#track-name')).includes('Mountain') && await page.evaluate(() => document.querySelector('#btn-play').disabled), 'tracks: the Mountain is locked at first');
   await page.click('#track-prev');
   // Coins picked up are kept even when the ride is not finished.
   await page.click('#btn-play');
@@ -331,13 +331,24 @@ log('\n▶ coins, garage and tracks');
   await page.evaluate(() => window.__cc.pause());
   await page.click('#btn-quit');
   // With every track open, the Rainbow Road can be played.
-  await page.evaluate(() => { localStorage.setItem('cartcrash:unlocked', '4'); window.__cc.refresh(); });
+  await page.evaluate(() => { localStorage.setItem('cartcrash:unlocked', '5'); window.__cc.refresh(); });
   await page.click('#track-prev');
   check((await page.textContent('#track-name')).includes('Rainbow Road') && !(await page.evaluate(() => document.querySelector('#btn-play').disabled)), 'tracks: the Rainbow Road opens');
   await page.click('#btn-play');
   check(await page.evaluate(() => window.__cc.game.track) === 'arcobaleno', 'tracks: the race is on the chosen track');
   await frames(page, 60);
   await page.screenshot({ path: join(SHOTS, 'rainbow.png') });
+  // Every track can be ridden for a while without errors.
+  for (const id of ['montagna', 'mare', 'vulcano']) {
+    await page.evaluate((t) => { window.__cc.pause(); }, id);
+    await page.click('#btn-quit');
+    await page.evaluate((t) => window.__cc.showTrack(t), id);
+    await page.click('#btn-play');
+    await page.evaluate(() => { const g = window.__cc.game; g.lives = 99; g.maxLives = 99; });
+    await frames(page, 150);
+    check(await page.evaluate(() => window.__cc.game.track) === id && await page.evaluate(() => window.__cc.game.distance) > 40, `tracks: a ride on ${id}`);
+    await page.screenshot({ path: join(SHOTS, `${id}.png`) });
+  }
   check(errors.length === 0, `progression: errors ${errors.join(' | ')}`);
   await ctx.close();
 }

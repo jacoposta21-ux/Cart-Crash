@@ -2,7 +2,7 @@
 import { BUILD } from './build.js';
 import { createGame, step, drainEvents, result, count, handling, listProgress, extras, EXTRA_PENALTY } from './game.js';
 import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon, cartIcon } from './render3d.js';
-import { TRACK_ORDER } from './tracks.js';
+import { TRACKS, TRACK_ORDER } from './tracks.js';
 import { CARTS, CART_ORDER } from './carts.js';
 import { createProgress, mergeProgress, PROGRESS_KEYS, KEYS } from './progress.js';
 import { botSteer, POLICIES } from './bot.js';
@@ -10,7 +10,7 @@ import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
 import { portal } from './portal.js';
-import { ITEM_NAME, GOODS_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST, TRACK_NAME, CART_NAME } from './strings.js';
+import { ITEM_NAME, GOODS_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST, TRACK_NAME, CART_NAME, CHASER_CHIP, CHASER_TOAST, CROSSING_TOAST, FALL_TITLE, HIT_TITLE } from './strings.js';
 
 const PORTAL = BUILD.target !== 'web';
 const params = new URLSearchParams(location.search);
@@ -264,7 +264,7 @@ function start(track = progress.track()) {
   game = createGame(seed, { track: TEST && params.get('track') ? params.get('track') : track, cart: progress.cart() });
   banked = 0;
   setGame(R, game);
-  lastSection = 'street';
+  lastSection = game.world.sectionAt(0).kind;
   acc = 0;
   pointers.clear();
   keys.brake = false;
@@ -272,7 +272,8 @@ function start(track = progress.track()) {
   show(null);
   buildList();
   updateHud(true);
-  showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop · Q balloon'), 3500);
+  if (game.T.roller === 'boulder') showHint(t('A boulder is rolling after you: never stop!'), 3500);
+  else showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop · Q balloon'), 3500);
   portal.gameplay(true);
   audio.startMusic();
   saveProgress(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
@@ -299,6 +300,7 @@ function resume() {
   audio.startMusic();
 }
 
+let firstReward = 0;
 function finish() {
   mode = 'end';
   portal.gameplay(false);
@@ -310,6 +312,9 @@ function finish() {
   const isRecord = r.won && (best === null || r.total < best);
   if (isRecord) progress.setBest(game.track, r.total);
   const opened = r.won ? progress.finished(game.track) : null;
+  // The first time a track is finished: a big reward.
+  firstReward = r.won && progress.firstWin(game.track) ? TRACKS[game.track].first : 0;
+  if (firstReward) progress.addCoins(firstReward);
   renderEnd(r, isRecord, best, opened);
   show('screen-end');
   if (isRecord) { audio.record(); portal.happytime(); }
@@ -318,7 +323,7 @@ function finish() {
 function renderEnd(r, isRecord, prevBest, opened) {
   const title = r.won
     ? (isRecord && prevBest !== null ? t('New record!') : t('Checkout!'))
-    : r.reason === 'train' ? t('Hit by the train!') : r.reason === 'fell' ? t('Fell off the rainbow!') : t('Out of lives!');
+    : r.reason === 'train' ? t(HIT_TITLE[game.hitBy] || HIT_TITLE.train) : r.reason === 'fell' ? t(FALL_TITLE[game.fellInto] || FALL_TITLE.space) : t('Out of lives!');
   $('end-title').textContent = title;
   $('end-record').hidden = !(isRecord && prevBest !== null);
   $('end-score').textContent = r.won ? formatTime(r.total) : `${r.have}/${r.need}`;
@@ -335,7 +340,7 @@ function renderEnd(r, isRecord, prevBest, opened) {
     $('end-b').textContent = formatTime(r.time);
   }
   $('end-crashes').textContent = String(r.crashes);
-  $('end-coins').innerHTML = `<i class="coin"></i> +${game.coins}${game.bonus ? ` <small>(${t('checkout bonus +{n}', { n: game.bonus })})</small>` : ''}`;
+  $('end-coins').innerHTML = `<i class="coin"></i> +${game.coins + firstReward}${game.bonus ? ` <small>(${t('checkout bonus +{n}', { n: game.bonus })}${firstReward ? ` · ${t('first win +{n}', { n: firstReward })}` : ''})</small>` : ''}`;
   $('end-unlock').hidden = !opened;
   if (opened) $('end-unlock').textContent = t('New track unlocked: {track}!', { track: t(TRACK_NAME[opened]) });
   const best = progress.best(game.track);
@@ -431,18 +436,22 @@ function updateHud(force) {
   };
   const dogM = behind(g.dogs);
   const dog = dogM !== null && dogM < 12 ? dogM : null;
+  const dogKind = dog !== null ? g.dogs.filter((d) => d.state === 'chase').sort((a, b) => b.y - a.y)[0].species : null;
+  const roller = g.rollers.length ? g.rollers.reduce((a, q) => (q.gap < a.gap ? q : a)) : null;
+  const rollM = roller && roller.gap < 20 ? Math.max(0, Math.round(roller.gap)) : null;
   const nExtra = extras(g);
   $('btn-release').hidden = !(balloons > 0 && mode === 'play' && !g.over);
   const cop = behind(g.cops);
-  const key = `${melons}|${balloons}|${oil}|${wobbly}|${dog}|${cop}|${nExtra}|${getLang()}`;
+  const key = `${melons}|${balloons}|${oil}|${wobbly}|${dog}|${dogKind}|${rollM}|${cop}|${nExtra}|${getLang()}`;
   if (key === chipsKey && !force) return;
   chipsKey = key;
   const chips = [];
-  if (dog !== null) { const c = document.createElement('span'); c.className = 'chip warn'; c.textContent = t('Dog {n} m behind: drop something!', { n: dog }); chips.push(c); }
+  if (dog !== null) { const c = document.createElement('span'); c.className = 'chip warn'; c.textContent = t(CHASER_CHIP[dogKind] || CHASER_CHIP.dog, { n: dog }); chips.push(c); }
+  if (rollM !== null) { const c = document.createElement('span'); c.className = 'chip warn'; c.textContent = t(CHASER_CHIP[roller.type], { n: rollM }); chips.push(c); }
   if (cop !== null) { const c = document.createElement('span'); c.className = 'chip warn cop'; c.textContent = t('Police {n} m behind: don\'t slow down!', { n: cop }); chips.push(c); }
   if (nExtra) { const c = document.createElement('span'); c.className = 'chip extra'; c.textContent = t('Extras: {n} (+{s}s)', { n: nExtra, s: nExtra * EXTRA_PENALTY }); chips.push(c); }
   if (melons) chips.push(chip('melon', `${t('Heavy')} ×${melons}`));
-  if (balloons) chips.push(chip('balloon', `${t('Floaty')} ×${balloons}`));
+  if (balloons) chips.push(chip('balloon', `${t('Glide')} ×${balloons}`));
   if (oil) chips.push(chip('oil', `${t('Slippery')} ${oil}s`, true));
   if (wobbly) chips.push(chip('goods', t('Wobbly!'), true));
   $('hud-chips').replaceChildren(...chips);
@@ -457,7 +466,9 @@ function label(kind, e) {
   if (kind === 'crash') return e.obstacle === 'walker' ? t('Sorry!') : t('Crash!');
   if (kind === 'drop') return nameOf(e.item.type === 'goods' ? e.item.goods : e.item.type);
   if (kind === 'bite') return t('Ouch!');
-  if (kind === 'falling') return t('Whoops!');
+  if (kind === 'falling') return e.into === 'water' ? t('Splash!') : e.into === 'lava' ? t('Hot hot hot!') : t('Whoops!');
+  if (kind === 'stolen') return t('Stolen!');
+  if (kind === 'squashed') return t('Squashed!');
   return '';
 }
 
@@ -473,18 +484,25 @@ function handleEvents(g, events, live) {
     if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list: +5 seconds at the checkout! Tap Drop to throw the top thing away.') : t('Not on the list: +5 seconds at the checkout! Press E to drop the top thing.'), 3800); }
     if (e.type === 'tall') toast(t('What a pile!'));
     if (e.type === 'ramp') toast(t('Wheee!'));
-    if (e.type === 'dog') toast(t('Woof!'));
+    if (e.type === 'dog') toast(t(CHASER_TOAST[e.species] || CHASER_TOAST.dog));
     if (e.type === 'yellow') toast(t('Red light ahead: brake!'), 'warn');
-    if (e.type === 'bells') toast(t('Train coming: stop!'), 'warn');
+    if (e.type === 'bells') toast(t(CROSSING_TOAST[e.vehicle] || CROSSING_TOAST.train), 'warn');
     if (e.type === 'crowdhit') showHint(t('You ran into the crowd: they knocked everything out of the cart!'), 3500);
     if (e.type === 'cop') { toast(t('Police!'), 'warn'); showHint(t('You ran the red light! The traffic warden is after you for 10 seconds: keep going, don\'t slow down.'), 3800); }
     if (e.type === 'caught') showHint(t('The traffic warden caught you: a fine costs you a life.'), 3200);
     if (e.type === 'copgaveup') toast(t('Got away!'), 'go');
-    if (e.type === 'bite') showHint(t('The dog caught you! Drop something next time to keep it busy.'), 3200);
+    if (e.type === 'bite') showHint(t('Caught! Drop something next time to keep it busy.'), 3200);
     if (e.type === 'dogeats') toast(t('Good dog!'));
     if (e.type === 'listdone') toast(t('Got everything! To the checkout!'), 'go');
     if (e.type === 'listbroken') showHint(t('Something on the list fell off: get another one!'), 3000);
     if (e.type === 'crash' && e.lives === 1) showHint(t('Careful: one more crash and you are out!'), 2500);
+    if (e.type === 'heart') toast(e.coins ? t('+{n} coins', { n: e.coins }) : t('+1 life!'), 'go');
+    if (e.type === 'boost') toast(t('Turbo!'), 'go');
+    if (e.type === 'skijump' || e.type === 'geyser') toast(t('Wheee!'));
+    if (e.type === 'wave' && !shownTips.has('wave')) { shownTips.add('wave'); showHint(t('A wave! Jump it, or it pushes you off the pier.'), 3200); }
+    if (e.type === 'stolen' && !shownTips.has('stolen')) { shownTips.add('stolen'); showHint(t('It stole the top of your pile! Keep rolling fast, or drop something for it.'), 3500); }
+    if (e.type === 'roller') showHint(t('A giant snowball is rolling after you: don\'t slow down!'), 3200);
+    if (e.type === 'glide' && !shownTips.has('glide')) { shownTips.add('glide'); toast(t('Gliding!'), 'go'); }
     if (e.type === 'respawn') showHint(e.lives === 1 ? t('Careful: one more crash and you are out!') : t('Stay on the rainbow: off the edge costs a life!'), 2500);
   }
 }

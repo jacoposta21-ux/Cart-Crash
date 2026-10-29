@@ -3,13 +3,15 @@
 // people, pigeons, dogs, traffic lights, trains, the checkout, coins, flying
 // debris and little effects). Sky, light and scenery follow the track.
 import * as THREE from '../vendor/three/three.module.min.js';
-import { itemHeight, stackHeight, wanted, lightPhase, trainSpan, railBarrierDown, crowdPeople } from './game.js';
+import { itemHeight, stackHeight, wanted, lightPhase, trainSpan, railBarrierDown, crowdPeople, crossTime, geyserUp, RAIL_WARN } from './game.js';
 import { OBSTACLES, SECTION, LIGHT_STOP, RAIL_STOP } from './world.js';
 import { buildSection } from './town.js';
 import {
-  makeItem, makeBalloon, makeCart, makeObstacle, makeWalker, animateWalker, makePigeon, makeDog, animateDog,
+  makeItem, makeBalloon, makeCart, makeObstacle, makeWalker, animateWalker, makePigeon,
   makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain, makeCop, makeCoin,
+  makeAnimal, animateAnimal, makePlow, makeWhale, makeRoller, makeHeart, makeWave,
 } from './models.js';
+import { buildBackdrop } from './town.js';
 import { TRACKS } from './tracks.js';
 
 const VIEW_AHEAD = 115;
@@ -49,6 +51,8 @@ export function createRenderer(canvas, fxLayer) {
     balloons: [],
     dogs: new Map(),
     cops: new Map(),
+    rollers: new Map(),
+    backdrop: null,
     checkout: null,
     dropping: new Set(),
     label: (s) => s,
@@ -96,6 +100,8 @@ export function setGame(R, g) {
   R.dogs.clear();
   for (const p of R.cops.values()) R.scene.remove(p);
   R.cops.clear();
+  for (const q of R.rollers.values()) R.scene.remove(q);
+  R.rollers.clear();
   if (R.checkout) { R.scene.remove(R.checkout); R.checkout = null; }
   R.dropping.clear();
   R.pile.clear();
@@ -110,6 +116,10 @@ export function setGame(R, g) {
   R.hemi.color.set(T.hemi[0]); R.hemi.groundColor.set(T.hemi[1]); R.hemi.intensity = T.hemi[2];
   R.sun.color.set(T.sun[0]); R.sun.intensity = T.sun[1];
   R.stars.visible = T.theme === 'rainbow';
+  // Far away scenery (mountains, the volcano, islands) that moves with the camera.
+  if (R.backdrop) R.scene.remove(R.backdrop);
+  R.backdrop = buildBackdrop(T.theme);
+  if (R.backdrop) R.scene.add(R.backdrop);
   // The cart: root follows the road, body leans and spins, pile sits in the basket.
   const root = new THREE.Group();
   const body = makeCart(g.cartType);
@@ -221,6 +231,7 @@ export function render(R, g, dt) {
   syncCart(R, g, dt);
   syncDogs(R, g);
   syncCops(R, g);
+  syncRollers(R, g);
   syncCheckout(R, g);
   updateDebris(R, g, dt);
   updateParts(R, dt);
@@ -236,8 +247,11 @@ export function render(R, g, dt) {
   const chased = g.dogs.some((d) => d.state === 'chase') || g.cops.some((p) => p.state === 'chase');
   R.wide = (R.wide || 0) + ((chased ? 1 : 0) - (R.wide || 0)) * Math.min(1, dt * 3);
   if (Math.abs(R.camera.fov - (R.baseFov + R.wide * 12)) > 0.05) { R.camera.fov = R.baseFov + R.wide * 12; R.camera.updateProjectionMatrix(); }
-  const back = (portrait ? 4.4 : 3.9) + H * 0.4 + out * 3 + R.wide * 0.9;
-  const up = (portrait ? 3.0 : 2.75) + H * 0.8 + out * 3 + R.wide * 0.8;
+  // Something big rolling after you: the camera rises and pulls back so you can see it coming.
+  const near = g.rollers.length ? Math.max(0, Math.min(1, (14 - Math.min(...g.rollers.map((q) => q.gap))) / 9)) : 0;
+  R.roll = (R.roll || 0) + (near - (R.roll || 0)) * Math.min(1, dt * 3);
+  const back = (portrait ? 4.4 : 3.9) + H * 0.4 + out * 3 + R.wide * 0.9 + R.roll * 4.5;
+  const up = (portrait ? 3.0 : 2.75) + H * 0.8 + out * 3 + R.wide * 0.8 + R.roll * 2.8;
   const ground = R.cartElev;
   const lookY = c.y + (portrait ? 9 : 7) - out * 6;
   const wantPos = v3.set(c.x * 0.85 + w.center(c.y - back) * 0.15, ground + up, -(c.y - back));
@@ -261,6 +275,7 @@ export function render(R, g, dt) {
   }
   R.camera.lookAt(R.camLook);
   if (R.stars.visible) R.stars.position.copy(R.camera.position);
+  if (R.backdrop) R.backdrop.position.set(R.camera.position.x, ground, R.camera.position.z);
   // Sun from the front-left, following the ride.
   R.sun.position.set(c.x - 20, ground + 30, -c.y - 10);
   R.sun.target.position.set(c.x, ground, -c.y - 30);
@@ -321,13 +336,22 @@ function makeEntityObj(R, g, e) {
   } else if (e.kind === 'rail') {
     root.add(buildRail(g, e));
   } else if (e.kind === 'obstacle') {
-    const inner = e.type === 'walker' ? makeWalker(e.look) : makeObstacle(e.type);
+    const inner = e.type === 'walker' ? makeWalker(e.look, e.style) : makeObstacle(e.type);
     const o = OBSTACLES[e.type];
     if (o.solid) root.add(makeShadow(o.r * 1.2));
     root.add(inner);
     root.userData = { inner };
   } else if (e.kind === 'coin') {
     const inner = makeCoin();
+    root.add(inner);
+    root.userData = { inner };
+  } else if (e.kind === 'heart') {
+    const inner = makeHeart();
+    root.add(makeShadow(0.3), inner);
+    root.userData = { inner };
+  } else if (e.kind === 'wave') {
+    const inner = makeWave();
+    inner.visible = false;
     root.add(inner);
     root.userData = { inner };
   } else if (e.kind === 'pigeons') {
@@ -368,6 +392,21 @@ function syncEntities(R, g) {
     if (e.kind === 'coin') {
       ud.inner.position.y = 0.45 + e.h + Math.sin(R.t * 4 + e.id) * 0.06;
       ud.inner.rotation.y = R.t * 3.5 + e.id * 0.4;
+    } else if (e.kind === 'heart') {
+      ud.inner.position.y = 0.6 + Math.sin(R.t * 4 + e.id) * 0.1;
+      ud.inner.rotation.y = R.t * 2.5;
+      ud.inner.scale.setScalar(1 + Math.sin(R.t * 8) * 0.08);
+    } else if (e.kind === 'wave') {
+      ud.inner.visible = Boolean(e.going && !e.done);
+      ud.inner.rotation.y = e.side > 0 ? 0 : Math.PI;
+    } else if (e.type === 'geyser') {
+      const up = geyserUp(g, e);
+      const jet = ud.inner.userData.jet;
+      jet.scale.y += ((up ? 1 : 0.05) - jet.scale.y) * 0.25;
+      jet.visible = jet.scale.y > 0.08;
+      jet.rotation.y = R.t * 2;
+    } else if (e.type === 'boost') {
+      ud.inner.userData.arrows.forEach((a, i) => { a.children.forEach((b) => b.material.color.set(Math.floor(R.t * 8 - i) % 3 === 0 ? '#ffffff' : '#ffd23f')); });
     } else if (e.kind === 'item') {
       ud.inner.position.y = (e.type === 'balloon' ? 0.9 : 0.12) + Math.sin(R.t * 3 + e.id) * 0.08;
       ud.inner.rotation.y = R.t * 1.6 + e.id;
@@ -486,6 +525,12 @@ function syncCart(R, g, dt) {
     const lean = tilt + shiver;
     obj.position.set(Math.sin(lean) * b * (1 + 0.1 * b) + jx * Math.min(1, 0.4 + b), BASKET_Y + 0.03 + b, jz * (b < 0.6 ? 1 : 0.5));
     obj.rotation.set(0, (hashf(it.id, 3) - 0.5) * 1.2, -lean * (0.5 + 0.12 * b));
+    // Above the rider's head the pile turns see-through, so the road stays in view.
+    const ghost = b > 1.0;
+    if (obj.userData.ghost !== ghost) {
+      obj.userData.ghost = ghost;
+      obj.traverse((o) => { if (o.isMesh) o.material = ghost ? ghostOf(o.material) : o.material.userData?.solid || o.material; });
+    }
     base += itemHeight(it);
   });
 
@@ -523,6 +568,21 @@ function syncCart(R, g, dt) {
   });
 }
 
+// See-through copies of the materials (for the top of a tall pile).
+const ghosts = new Map();
+function ghostOf(m) {
+  if (m.userData?.isGhost) return m;
+  if (!ghosts.has(m)) {
+    const c = m.clone();
+    c.transparent = true;
+    c.opacity = 0.32;
+    c.depthWrite = false;
+    c.userData = { isGhost: true, solid: m };
+    ghosts.set(m, c);
+  }
+  return ghosts.get(m);
+}
+
 function hashf(a, b) {
   let h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1);
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
@@ -550,8 +610,8 @@ function syncDogs(R, g) {
     let obj = R.dogs.get(d);
     if (!obj) {
       obj = new THREE.Group();
-      const body = makeDog(d.look);
-      obj.add(makeShadow(0.45), body);
+      const body = makeAnimal(d.species || 'dog', d.look);
+      obj.add(makeShadow(d.species === 'gull' ? 0.25 : 0.45), body);
       obj.userData.body = body;
       R.scene.add(obj);
       R.dogs.set(d, obj);
@@ -561,12 +621,14 @@ function syncDogs(R, g) {
     if (d.state === 'eat') {
       obj.rotation.y = Math.PI;
       body.userData.head.rotation.x = 0.6 + Math.sin(R.t * 12) * 0.15;
-      animateDog(body, 0);
+      animateAnimal(body, 0);
     } else {
       body.userData.head.rotation.x = 0;
       // Running down the hill after the cart (the model faces -z), or trotting off to the side.
       obj.rotation.y = d.state === 'leave' ? -Math.PI / 2 * Math.sign(d.x - g.world.center(d.y) || 1) : -Math.atan2(g.cart.x - d.x, 4) * 0.6;
-      animateDog(body, d.run * 16);
+      animateAnimal(body, d.run * 16);
+      // a thief flies or runs off with what it took: up and away
+      if (d.stole && d.state === 'leave') body.position.y = Math.min(6, body.position.y + 0.08);
     }
   }
 }
@@ -591,6 +653,28 @@ function syncCops(R, g) {
     if (p.state === 'chase') body.rotation.x = -0.25; // leaning into the run
     // one arm up, whistling
     if (p.state === 'chase') body.userData.armR.rotation.x = -2.6 + Math.sin(R.t * 14) * 0.2;
+  }
+}
+
+// ---------- snowballs and the boulder, rolling after the cart ----------
+function syncRollers(R, g) {
+  const live = new Set(g.rollers);
+  for (const [q, obj] of R.rollers) if (!live.has(q)) { R.scene.remove(obj); R.rollers.delete(q); }
+  const c = g.cart;
+  for (const q of g.rollers) {
+    let obj = R.rollers.get(q);
+    if (!obj) {
+      obj = new THREE.Group();
+      const body = makeRoller(q.type);
+      obj.add(makeShadow(q.type === 'boulder' ? 1.6 : 1.0), body);
+      obj.userData.body = body;
+      R.scene.add(obj);
+      R.rollers.set(q, obj);
+    }
+    const y = c.y - q.gap;
+    const w = g.world;
+    obj.position.copy(worldPos(g, w.center(y) * 0.5 + c.x * 0.5, y));
+    obj.userData.body.userData.ball.rotation.x = -q.spin;
   }
 }
 
@@ -654,6 +738,28 @@ function buildRail(g, e) {
   const grp = new THREE.Group();
   const hw = g.world.halfWidth(e.y);
   const len = hw * 2 + 40;
+  if (e.vehicle === 'whale' || e.vehicle === 'plow') {
+    // No tracks: buoys (whale) or orange posts (snowplow) at the sides, a stop line, and what comes.
+    const stop = new THREE.Mesh(new THREE.BoxGeometry(hw * 2, 0.03, 0.35), mat(e.vehicle === 'whale' ? '#ffffff' : '#ff8c00'));
+    stop.position.set(0, 0.04, RAIL_STOP);
+    grp.add(stop);
+    const posts = [];
+    for (const side of [-1, 1]) {
+      const p = new THREE.Group();
+      p.position.set(side * (hw + 0.6), e.vehicle === 'whale' ? -1.2 : 0, RAIL_STOP - 0.6);
+      p.add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 1.4, 8), mat(e.vehicle === 'whale' ? '#e63946' : '#ff8c00')).translateY(0.7));
+      p.add(new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.3, 8), mat('#ffffff')).translateY(0.9));
+      const lamp = new THREE.MeshBasicMaterial({ color: '#441111' });
+      p.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lamp).translateY(1.55));
+      grp.add(p);
+      posts.push(lamp);
+    }
+    const train = e.vehicle === 'whale' ? makeWhale() : makePlow();
+    train.visible = false;
+    grp.add(train);
+    grp.userData = { barriers: [], posts, train };
+    return grp;
+  }
   const steel = mat('#8c939c'), wood = mat('#6b4f36');
   for (const z of [-0.72, 0.72]) grp.add(new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.1), steel).translateY(0.07).translateZ(z));
   for (let x = -len / 2; x < len / 2; x += 0.65) grp.add(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 2.3), wood).translateX(x).translateY(0.02));
@@ -680,10 +786,11 @@ function buildRail(g, e) {
 
 function updateRail(R, g, e, obj) {
   const grp = obj.children[0];
-  const { barriers, train } = grp.userData;
+  const { barriers, train, posts } = grp.userData;
   obj.position.x = g.world.center(e.y);
   const down = railBarrierDown(g, e);
-  const k = down ? Math.min(1, (g.t - e.t0) / 1.2) : Math.max(0, 1 - (g.t - (e.t0 + 2.4 + 3.4 + 0.6)) / 1.2);
+  const k = down ? Math.min(1, (g.t - e.t0) / 1.2) : Math.max(0, 1 - (g.t - (e.t0 + RAIL_WARN + crossTime(g, e) + 0.6)) / 1.2);
+  if (posts) posts.forEach((m, i) => m.color.set(e.state === 'warn' && down && (Math.floor(R.t * 3) + i) % 2 === 0 ? '#ff2020' : '#441111'));
   for (const b of barriers) {
     b.userData.arm.rotation.z = Math.PI / 2 * (1 - (e.state === 'idle' ? 0 : k));
     const on = e.state === 'warn' && down && Math.floor(R.t * 3) % 2 === 0;
@@ -695,6 +802,12 @@ function updateRail(R, g, e, obj) {
   if (span) {
     train.position.x = span.front - obj.position.x;
     train.rotation.y = e.dir > 0 ? 0 : Math.PI;
+    if (e.vehicle === 'whale') {
+      // up out of the sea, over the pier and back down
+      const k2 = Math.max(0, Math.min(1, (g.t - e.t0 - RAIL_WARN) / crossTime(g, e)));
+      train.position.y = -2.5 + Math.sin(k2 * Math.PI) * 4.2;
+      train.rotation.z = (e.dir > 0 ? 1 : -1) * Math.cos(k2 * Math.PI) * 0.5;
+    }
   }
 }
 

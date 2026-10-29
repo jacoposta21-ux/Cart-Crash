@@ -317,6 +317,96 @@ export function makeObstacle(type) {
       g.add(mesh(box(0.97, 0.06, 0.15), mat('#e8d7b0'), 0, 0.3, 0.33));
       break;
     }
+    case 'snowman': {
+      g.add(mesh(sph(0.48, 10, 8), mat('#f7fbff'), 0, 0.45, 0));
+      g.add(mesh(sph(0.34, 10, 8), mat('#f7fbff'), 0, 1.05, 0));
+      g.add(mesh(sph(0.24, 10, 8), mat('#f7fbff'), 0, 1.5, 0));
+      const nose = mesh(cone(0.05, 0.25, 6), mat('#ff7b00'), 0, 1.5, -0.3); nose.rotation.x = -Math.PI / 2; g.add(nose);
+      for (const x of [-0.08, 0.08]) g.add(mesh(box(0.05, 0.05, 0.03), mat('#1d1e24'), x, 1.58, -0.22));
+      g.add(mesh(cyl(0.18, 0.2, 0.25, 10), mat('#1d1e24'), 0, 1.8, 0));
+      g.add(mesh(box(0.5, 0.08, 0.12), mat('#e63946'), 0, 1.3, -0.12));
+      for (const x of [-0.45, 0.45]) { const arm = mesh(box(0.5, 0.04, 0.04), mat('#6b4226'), x, 1.15, 0); arm.rotation.z = x > 0 ? 0.5 : -0.5; g.add(arm); }
+      break;
+    }
+    case 'flag': {
+      g.add(mesh(cyl(0.03, 0.03, 1.5, 6), mat('#ffffff'), 0, 0.75, 0));
+      g.add(mesh(box(0.02, 0.45, 0.55), mat(['#e63946', '#3a86ff'][Math.floor(Math.random() * 2)]), 0, 1.25, -0.28));
+      break;
+    }
+    case 'pine': {
+      g.add(mesh(cyl(0.12, 0.15, 0.7, 6), mat('#6b4226'), 0, 0.35, 0));
+      for (let i = 0; i < 3; i++) g.add(mesh(cone(0.8 - i * 0.2, 1.1, 7), mat(i === 2 ? '#f4f8fb' : '#2f5d3a'), 0, 1.0 + i * 0.65, 0));
+      break;
+    }
+    case 'barrel': {
+      g.add(mesh(cyl(0.38, 0.38, 0.95, 12), mat('#9c6644'), 0, 0.48, 0));
+      for (const y of [0.15, 0.8]) g.add(mesh(cyl(0.4, 0.4, 0.06, 12), mat('#3d405b'), 0, y, 0));
+      break;
+    }
+    case 'umbrella': {
+      g.add(mesh(cyl(0.04, 0.04, 2.1, 6), mat('#f4f1ea'), 0, 1.05, 0));
+      g.add(mesh(cone(1.1, 0.5, 8), mat(['#e63946', '#3fa7d6', '#ffd166'][Math.floor(Math.random() * 3)]), 0, 2.15, 0));
+      g.add(mesh(box(1.4, 0.06, 0.6), mat('#3fa7d6'), 0.6, 0.03, 0.4)); // a towel
+      break;
+    }
+    case 'sandcastle': {
+      g.add(mesh(box(1.1, 0.3, 0.8), mat('#e9c46a'), 0, 0.15, 0));
+      for (const x of [-0.4, 0.4]) { g.add(mesh(cyl(0.16, 0.18, 0.5, 8), mat('#e9c46a'), x, 0.5, 0)); g.add(mesh(cone(0.18, 0.2, 8), mat('#d4a944'), x, 0.85, 0)); }
+      g.add(mesh(box(0.02, 0.2, 0.15), mat('#e63946'), 0.4, 1.05, 0));
+      break;
+    }
+    case 'deckchair': {
+      const seat = mesh(box(1.2, 0.05, 0.6), mat('#3fa7d6'), 0, 0.42, 0); seat.rotation.x = 0.35; g.add(seat);
+      for (const x of [-0.55, 0.55]) g.add(mesh(box(0.05, 0.45, 0.6), mat('#9c6644'), x, 0.22, 0));
+      break;
+    }
+    case 'rock': {
+      const r = mesh(sph(0.6, 6, 5), mat('#6b5b53'), 0, 0.45, 0); r.scale.set(1, 0.85, 0.9); g.add(r);
+      g.add(mesh(sph(0.3, 5, 4), mat('#7d6b60'), 0.35, 0.25, 0.2));
+      break;
+    }
+    case 'stump': {
+      g.add(mesh(cyl(0.4, 0.45, 0.55, 9), mat('#7a5230'), 0, 0.28, 0));
+      g.add(mesh(cyl(0.36, 0.36, 0.02, 9), mat('#d9b07a'), 0, 0.56, 0));
+      break;
+    }
+    case 'log': {
+      const l = mesh(cyl(0.28, 0.28, 2.8, 9), mat('#7a5230'), 0, 0.28, 0); l.rotation.z = Math.PI / 2; g.add(l);
+      for (const x of [-1.4, 1.4]) { const e = mesh(cyl(0.26, 0.26, 0.03, 9), mat('#d9b07a'), x, 0.28, 0); e.rotation.z = Math.PI / 2; g.add(e); }
+      g.add(mesh(sph(0.15, 5, 4), mat('#4f8a3a'), 0.4, 0.55, 0));
+      break;
+    }
+    case 'skijump': {
+      const shape = new THREE.Shape([new THREE.Vector2(-1.4, 0), new THREE.Vector2(1.0, 0), new THREE.Vector2(1.0, 0.9), new THREE.Vector2(0.6, 0.9)]);
+      const wedge = new THREE.Mesh(geo('skijump', () => new THREE.ExtrudeGeometry(shape, { depth: 1.8, bevelEnabled: false })), mat('#eef5fb'));
+      wedge.rotation.y = Math.PI / 2;
+      wedge.position.set(-0.9, 0, 0);
+      g.add(wedge);
+      for (const x of [-0.95, 0.95]) g.add(mesh(box(0.08, 0.5, 2.3), mat('#e63946'), x, 0.35, 0.2));
+      break;
+    }
+    case 'geyser': {
+      for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; g.add(mesh(sph(0.22, 5, 4), mat('#4a3b35'), Math.cos(a) * 0.6, 0.1, Math.sin(a) * 0.6)); }
+      g.add(mesh(cyl(0.5, 0.5, 0.03, 10), mat('#ff7b00', { basic: true }), 0, 0.03, 0));
+      const jet = new THREE.Group();
+      for (let i = 0; i < 5; i++) jet.add(mesh(sph(0.4 + i * 0.12, 7, 5), mat('#f4f1ea', { opacity: 0.75 }), (i % 2 ? 0.1 : -0.1), 0.5 + i * 0.75, 0));
+      g.add(jet);
+      g.userData.jet = jet;
+      break;
+    }
+    case 'boost': {
+      g.add(mesh(box(1.5, 0.02, 1.8), mat('#1b0f3d', { basic: true }), 0, 0.01, 0));
+      const arrows = [];
+      for (let i = 0; i < 3; i++) {
+        const a = new THREE.Group();
+        for (const sd of [-1, 1]) { const b = mesh(box(0.7, 0.03, 0.18), mat('#ffd23f', { basic: true }), sd * 0.27, 0.03, 0); b.rotation.y = sd * 0.75; a.add(b); }
+        a.position.z = 0.55 - i * 0.55;
+        g.add(a);
+        arrows.push(a);
+      }
+      g.userData.arrows = arrows;
+      break;
+    }
     case 'block': {
       // A floating golden block with a star (Rainbow Road).
       g.add(mesh(box(0.95, 0.95, 0.95), mat('#ffb703'), 0, 0.5, 0));
@@ -500,10 +590,15 @@ const SHIRT = ['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#8f6bff', '#ffd23f',
 const PANTS = ['#264653', '#3d405b', '#6b705c', '#1d3557', '#9c6644'];
 const HAIR = ['#2b2118', '#6b4423', '#d9b36c', '#9a9a9a', '#e8e8e8', '#b23a48'];
 
-/** Someone crossing the street (legs swing while walking). look: a number picking colours and extras. */
-export function makeWalker(look) {
+/**
+ * Someone crossing the street (legs swing while walking). look: a number picking colours and extras.
+ * style: 'skier' (helmet, goggles, skis and poles) or 'bather' (swimsuit, sun hat).
+ */
+export function makeWalker(look, style = null) {
   const g = new THREE.Group();
-  const shirt = mat(SHIRT[look % SHIRT.length]), pants = mat(PANTS[(look >> 2) % PANTS.length]);
+  const skier = style === 'skier', bather = style === 'bather';
+  const shirt = mat(skier ? ['#e63946', '#3a86ff', '#ffbe0b', '#8338ec'][look % 4] : SHIRT[look % SHIRT.length]);
+  const pants = mat(skier ? '#1d3557' : bather ? ['#ef476f', '#118ab2', '#ffd166', '#06d6a0'][look % 4] : PANTS[(look >> 2) % PANTS.length]);
   const skin = mat(SKIN[(look >> 1) % SKIN.length]), hair = mat(HAIR[(look >> 3) % HAIR.length]);
   const legL = new THREE.Group(), legR = new THREE.Group();
   for (const [leg, x] of [[legL, -0.11], [legR, 0.11]]) {
@@ -512,18 +607,29 @@ export function makeWalker(look) {
     leg.add(mesh(box(0.16, 0.08, 0.26), mat('#2b2d42'), 0, -0.78, -0.04));
     g.add(leg);
   }
-  g.add(mesh(box(0.44, 0.6, 0.26), shirt, 0, 1.1, 0));
+  g.add(mesh(box(0.44, 0.6, 0.26), bather ? skin : shirt, 0, 1.1, 0));
   const armL = new THREE.Group(), armR = new THREE.Group();
   for (const [arm, x] of [[armL, -0.28], [armR, 0.28]]) {
     arm.position.set(x, 1.36, 0);
-    arm.add(mesh(box(0.11, 0.55, 0.13), shirt, 0, -0.26, 0));
+    arm.add(mesh(box(0.11, 0.55, 0.13), bather ? skin : shirt, 0, -0.26, 0));
     arm.add(mesh(box(0.1, 0.1, 0.1), skin, 0, -0.56, 0));
     g.add(arm);
   }
   g.add(mesh(box(0.28, 0.3, 0.28), skin, 0, 1.58, 0));
   g.add(mesh(box(0.3, 0.12, 0.3), hair, 0, 1.76, 0.01));
-  if (look % 3 === 0) g.add(mesh(box(0.2, 0.28, 0.24), mat('#e9c46a'), 0.3, 0.95, 0)); // a shopping bag
-  if (look % 4 === 1) { g.add(mesh(cyl(0.22, 0.22, 0.04, 10), mat('#3d405b'), 0, 1.82, 0)); g.add(mesh(cyl(0.14, 0.15, 0.14, 10), mat('#3d405b'), 0, 1.88, 0)); }
+  if (skier) {
+    // helmet, goggles, skis, poles
+    g.add(mesh(box(0.32, 0.16, 0.32), shirt, 0, 1.8, 0.01));
+    g.add(mesh(box(0.3, 0.08, 0.04), mat('#ffb703'), 0, 1.62, -0.15));
+    for (const leg of [legL, legR]) leg.add(mesh(box(0.1, 0.04, 1.5), mat('#2b2d42'), 0, -0.8, -0.2));
+    for (const arm of [armL, armR]) arm.add(mesh(box(0.03, 1.0, 0.03), mat('#9aa5b1'), 0, -0.75, -0.1));
+  } else if (bather) {
+    if (look % 2) g.add(mesh(cyl(0.3, 0.3, 0.03, 10), mat('#f6e7b4'), 0, 1.8, 0)), g.add(mesh(cyl(0.16, 0.17, 0.12, 10), mat('#f6e7b4'), 0, 1.86, 0));
+    else g.add(mesh(box(0.42, 0.18, 0.04), mat('#ffd166'), 0.05, 1.15, -0.14)); // a rubber ring
+  } else {
+    if (look % 3 === 0) g.add(mesh(box(0.2, 0.28, 0.24), mat('#e9c46a'), 0.3, 0.95, 0)); // a shopping bag
+    if (look % 4 === 1) { g.add(mesh(cyl(0.22, 0.22, 0.04, 10), mat('#3d405b'), 0, 1.82, 0)); g.add(mesh(cyl(0.14, 0.15, 0.14, 10), mat('#3d405b'), 0, 1.88, 0)); }
+  }
   g.userData = { legL, legR, armL, armR };
   return g;
 }
@@ -591,6 +697,145 @@ export function animateDog(g, phase) {
   legs.forEach((l, i) => { l.rotation.x = Math.sin(phase + (i % 2 ? Math.PI : 0) + (i > 1 ? 0.6 : 0)) * 0.8; });
   tail.rotation.y = Math.sin(phase * 2) * 0.6;
   head.position.y = 0.68 + Math.abs(Math.sin(phase)) * 0.04;
+}
+
+/** A goat, a crab, a gull or a monkey: what chases (or steals) on the other tracks. Same animation hooks as the dog. */
+export function makeAnimal(species, look = 0) {
+  if (species === 'dog') return makeDog(look);
+  const g = new THREE.Group();
+  const legs = [];
+  let tail = new THREE.Group(), head = new THREE.Group();
+  if (species === 'goat') {
+    const fur = mat(['#f1ece2', '#c8b8a2', '#8a7560', '#f1ece2'][look % 4]);
+    g.add(mesh(box(0.38, 0.36, 0.75), fur, 0, 0.6, 0));
+    head.position.set(0, 0.88, -0.42);
+    head.add(mesh(box(0.24, 0.26, 0.32), fur, 0, 0, -0.05));
+    head.add(mesh(box(0.08, 0.16, 0.06), mat('#d9cbb0'), 0, -0.18, -0.15)); // beard
+    for (const x of [-0.08, 0.08]) { const h = mesh(cone(0.04, 0.3, 5), mat('#5c4a3a'), x, 0.2, 0.05); h.rotation.x = 0.6; head.add(h); }
+    g.add(head);
+    tail = mesh(box(0.06, 0.12, 0.06), fur, 0, 0.75, 0.4);
+    g.add(tail);
+    for (const [x, z] of [[-0.12, -0.27], [0.12, -0.27], [-0.12, 0.27], [0.12, 0.27]]) {
+      const l = new THREE.Group(); l.position.set(x, 0.45, z); l.add(mesh(box(0.08, 0.45, 0.08), fur, 0, -0.22, 0)); g.add(l); legs.push(l);
+    }
+  } else if (species === 'crab') {
+    const shell = mat('#e5383b');
+    const b = mesh(sph(0.32, 8, 5), shell, 0, 0.3, 0); b.scale.set(1.3, 0.6, 1); g.add(b);
+    for (const x of [-0.1, 0.1]) { g.add(mesh(cyl(0.02, 0.02, 0.2, 4), shell, x, 0.5, -0.15)); g.add(mesh(sph(0.05, 6, 4), mat('#1d1e24'), x, 0.6, -0.15)); }
+    for (const sd of [-1, 1]) {
+      const claw = new THREE.Group(); claw.position.set(sd * 0.35, 0.35, -0.3);
+      claw.add(mesh(box(0.18, 0.12, 0.22), shell, sd * 0.05, 0, -0.08));
+      g.add(claw); legs.push(claw);
+      for (let i = 0; i < 3; i++) { const l = mesh(box(0.3, 0.04, 0.04), shell, sd * 0.42, 0.18, -0.05 + i * 0.13); l.rotation.z = sd * -0.5; g.add(l); }
+    }
+    head = new THREE.Group(); g.add(head);
+    g.add(tail);
+    legs.push(new THREE.Group(), new THREE.Group());
+  } else if (species === 'gull') {
+    const body = mesh(sph(0.2, 8, 6), mat('#f4f6f8'), 0, 1.6, 0); body.scale.set(0.9, 0.8, 1.6); g.add(body);
+    head.position.set(0, 1.72, -0.28); head.add(mesh(sph(0.12, 8, 6), mat('#ffffff'))); const beak = mesh(cone(0.04, 0.16, 5), mat('#ffc300'), 0, 0, -0.15); beak.rotation.x = -Math.PI / 2; head.add(beak); g.add(head);
+    for (const sd of [-1, 1]) { const w = new THREE.Group(); w.position.set(sd * 0.12, 1.65, 0); w.add(mesh(box(0.7, 0.03, 0.3), mat('#9aa5b1'), sd * 0.35, 0, 0)); g.add(w); legs.push(w); }
+    g.add(tail);
+    legs.push(new THREE.Group(), new THREE.Group());
+  } else if (species === 'monkey') {
+    const fur = mat('#7a4a2a'), face = mat('#e0b48a');
+    g.add(mesh(box(0.34, 0.42, 0.3), fur, 0, 0.6, 0));
+    head.position.set(0, 0.95, -0.05);
+    head.add(mesh(sph(0.2, 8, 6), fur));
+    head.add(mesh(box(0.22, 0.16, 0.06), face, 0, -0.03, -0.17));
+    for (const x of [-0.2, 0.2]) head.add(mesh(sph(0.07, 6, 4), face, x, 0.02, 0));
+    g.add(head);
+    tail = mesh(box(0.05, 0.05, 0.6), fur, 0, 0.55, 0.4); tail.rotation.x = -0.9; g.add(tail);
+    for (const [x, y] of [[-0.12, 0.4], [0.12, 0.4], [-0.25, 0.75], [0.25, 0.75]]) {
+      const l = new THREE.Group(); l.position.set(x, y, 0); l.add(mesh(box(0.09, 0.38, 0.09), fur, 0, -0.18, 0)); g.add(l); legs.push(l);
+    }
+  }
+  g.userData = { legs, tail, head, species };
+  return g;
+}
+
+export function animateAnimal(g, phase) {
+  const { species, legs, tail, head } = g.userData;
+  if (!species || species === 'dog') { animateDog(g, phase); return; }
+  if (species === 'gull') {
+    const f = Math.sin(phase * 1.5) * 0.7;
+    legs[0].rotation.z = f; legs[1].rotation.z = -f;
+    return;
+  }
+  if (species === 'crab') {
+    legs[0].rotation.y = Math.sin(phase * 2) * 0.4; legs[1].rotation.y = -Math.sin(phase * 2) * 0.4;
+    g.children[0].position.y = 0.3 + Math.abs(Math.sin(phase * 2)) * 0.03;
+    return;
+  }
+  legs.forEach((l, i) => { l.rotation.x = Math.sin(phase + (i % 2 ? Math.PI : 0) + (i > 1 ? 0.6 : 0)) * 0.8; });
+  tail.rotation.y = Math.sin(phase * 2) * 0.5;
+  head.position.y += 0;
+}
+
+/** The snowplow: a yellow truck with a big blade, front at x = 0, running towards +x. */
+export function makePlow() {
+  const g = new THREE.Group();
+  g.add(mesh(box(5.2, 1.6, 2.4), mat('#ffb703'), -2.8, 1.5, 0));
+  g.add(mesh(box(2.0, 1.5, 2.3), mat('#ffb703'), -0.9, 2.2, 0));
+  g.add(mesh(box(1.9, 0.7, 2.32), mat('#26323d'), -0.85, 2.5, 0));
+  g.add(mesh(box(0.4, 1.2, 3.4), mat('#e63946'), 0.6, 0.75, 0));
+  g.add(mesh(box(0.2, 0.25, 0.25), mat('#ff8c00', { basic: true }), -0.9, 3.05, 0));
+  for (const x of [-4.4, -2.4, -0.9]) for (const z of [-1.15, 1.15]) { const w = mesh(cyl(0.5, 0.5, 0.3, 10), mat('#1d1d22'), x, 0.5, z); w.rotation.x = Math.PI / 2; g.add(w); }
+  for (let i = 0; i < 6; i++) g.add(mesh(sph(0.35, 6, 4), mat('#f7fbff'), 1.0, 0.3 + (i % 2) * 0.3, -1.4 + i * 0.55));
+  return g;
+}
+
+/** A whale leaping across, head at x = 0, swimming towards +x. */
+export function makeWhale() {
+  const g = new THREE.Group();
+  const body = mesh(sph(1.6, 12, 8), mat('#3d5a80'), -5, 0, 0); body.scale.set(4, 1.1, 1.2); g.add(body);
+  const belly = mesh(sph(1.55, 12, 8), mat('#e0e7ee'), -4.6, -0.45, 0); belly.scale.set(3.6, 0.7, 1.05); g.add(belly);
+  for (const z of [-1.4, 1.4]) { const fin = mesh(box(1.4, 0.15, 1.2), mat('#2b4162'), -3.2, -0.6, z); fin.rotation.x = z > 0 ? 0.5 : -0.5; g.add(fin); }
+  const tail = mesh(box(1.2, 0.2, 3.2), mat('#2b4162'), -11.5, 0.3, 0); g.add(tail);
+  for (const z of [-0.6, 0.6]) g.add(mesh(sph(0.15, 6, 4), mat('#1d1e24'), -0.9, 0.35, z * 1.6));
+  return g;
+}
+
+/** A snowball or the boulder: rolls along -z. */
+export function makeRoller(type) {
+  const g = new THREE.Group();
+  if (type === 'boulder') {
+    const b = mesh(sph(1.6, 8, 6), mat('#6b5b53'), 0, 1.6, 0);
+    g.add(b);
+    for (let i = 0; i < 6; i++) { const a = i * 1.1; b.add(mesh(sph(0.45, 5, 4), mat(i % 2 ? '#5a4a43' : '#7d6b60'), Math.cos(a) * 1.4, Math.sin(a * 1.3) * 0.9, Math.sin(a) * 1.3)); }
+    g.userData.ball = b;
+  } else {
+    const b = mesh(sph(1.0, 10, 8), mat('#f7fbff'), 0, 1.0, 0);
+    for (let i = 0; i < 5; i++) b.add(mesh(box(0.3, 0.3, 0.3), mat('#dfe8ef'), Math.cos(i * 1.3) * 0.85, Math.sin(i * 1.7) * 0.6, Math.sin(i * 1.3) * 0.6));
+    g.add(b);
+    g.userData.ball = b;
+  }
+  return g;
+}
+
+/** A heart to pick up (a life back). */
+export function makeHeart() {
+  const g = new THREE.Group();
+  const red = mat('#ff2a5f', { basic: true });
+  for (const x of [-0.13, 0.13]) g.add(mesh(sph(0.17, 10, 8), red, x, 0.1, 0));
+  const tip = mesh(cone(0.27, 0.38, 4), red, 0, -0.14, 0);
+  tip.rotation.z = Math.PI;
+  tip.rotation.y = Math.PI / 4;
+  tip.scale.set(1.08, 1, 0.55);
+  g.add(tip);
+  g.add(mesh(sph(0.06, 6, 4), mat('#ffffff', { basic: true }), -0.16, 0.18, -0.12));
+  return g;
+}
+
+/** A wave rolling across a pier. */
+export function makeWave() {
+  const g = new THREE.Group();
+  const w = mesh(cyl(0.55, 0.7, 2.6, 10), mat('#5ec8f5', { opacity: 0.85 }), 0, 0.3, 0);
+  w.rotation.x = Math.PI / 2;
+  w.scale.set(1, 1, 0.7);
+  g.add(w);
+  g.add(mesh(box(0.4, 0.2, 2.6), mat('#ffffff'), 0.25, 0.85, 0));
+  return g;
 }
 
 /** A soft round shadow (sits just above the ground). */

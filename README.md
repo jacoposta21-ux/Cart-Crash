@@ -63,31 +63,36 @@ un anello bianco.
 
 ## Piste, monete e garage
 
-- **4 piste**, sbloccate una dopo l'altra finendo quella prima (`src/tracks.js`):
-  1. **Borgo**: il paese italiano di partenza.
-  2. **Porto**: case colorate e palme da una parte, il mare con le barche
-     dall'altra; più veloce e con più cani; gabbiani al posto dei piccioni.
-  3. **Montagna**: chalet, neve e abeti; più veloce, strada più curva e
-     **lastre di ghiaccio** che fanno scivolare.
-  4. **Arcobaleno**: una pista arcobaleno sospesa nello spazio, alla Super
-     Mario: niente muri, **se esci dal bordo cadi** e perdi una vita (poi
-     riparti sulla pista); niente pedoni, semafori o treni, ma blocchi dorati,
-     sbarre luminose da saltare e la velocità più alta.
-  Ogni pista ha il suo record. Nel menu le frecce scelgono la pista (quelle
-  bloccate si vedono col lucchetto) e dietro al menu gira una corsa su quella.
-- **Monete** sulla strada (in fila, e in aria sopra gli ostacoli da saltare):
-  si tengono anche se la gara va male. Alla cassa c'è un bonus (20, 35, 55, 90
-  a seconda della pista).
+**5 piste**, sbloccate una dopo l'altra finendo quella prima (`src/tracks.js`).
+Ognuna aggiunge qualcosa di suo:
+
+| Pista | Cosa porta di nuovo |
+|---|---|
+| 1. Borgo | semafori e vigile, cani, passaggio a livello col treno |
+| 2. Montagna | piste da sci con reti e bandierine, **palle di neve giganti** che ti rotolano dietro (non rallentare!), **trampolini** con le monete in aria, **lago ghiacciato** (si scivola sempre), sciatori, pupazzi di neve, **capre**, lo **spazzaneve** al posto del treno |
+| 3. Mare | **pontili senza bordi** (se cadi in acqua perdi una vita), **buchi** tra un pontile e l'altro da saltare (con la rampa), isole con spiaggia e capanne, **onde** che ti spingono di lato, **granchi**, **gabbiani che rubano** l'oggetto in cima alla pila, la **balena** al posto del treno |
+| 4. Vulcano | un **masso gigante** che ti rotola dietro per tutta la gara (se ti fermi ti schiaccia), **fiumi di lava** da saltare, **ponti di corda** stretti che oscillano, **geyser** che ti lanciano in aria, **scimmie che rubano** |
+| 5. Arcobaleno | pista sospesa nello spazio senza muri, **frecce turbo**, **blocchi che si muovono** da un lato all'altro |
+
+- **Monete** sulla strada (in fila e in aria): restano anche se la gara va male.
+  Alla cassa c'è il bonus della pista (20, 35, 50, 70, 90); **la prima volta**
+  che finisci una pista il premio è 100, 200, 300, 400 o 500 monete.
+- **Cuori**: rarissimi, ridanno una vita (o 25 monete se le hai tutte).
+- **Palloncini**: salta, poi salta di nuovo in aria: il palloncino si consuma e
+  plani lontano (utile per buchi, acqua e lava).
+- **Pila**: la parte sopra la testa del ragazzo diventa semitrasparente.
+- **Inseguitori** (vigile, animali, palle di neve): durano meno col carrello
+  veloce e di più con quello lento.
 - **Garage** (`src/carts.js`): con le monete si comprano carrelli diversi.
   | Carrello | Prezzo | Vite | Caratteristiche |
   |---|---|---|---|
   | Classico | gratis | 3 | equilibrato |
   | Ferro | 150 | 4 | pesante: una vita in più, sterza un po' più lento |
-  | Da corsa | 400 | 3 | più veloce e sterza meglio, pila meno stabile |
+  | Da corsa | 400 | 3 | più veloce e sterza meglio, semina prima gli inseguitori |
   | Jumbo | 700 | 4 | più spazio per la pila, molto stabile |
   | Razzo | 1500 | 5 | veloce, sterza bene, stabile |
-- I progressi (monete, carrelli, piste aperte, record) restano sul dispositivo
-  (`src/progress.js`); su Playgama vanno anche nel loro cloud save.
+- I progressi (monete, carrelli, piste aperte e vinte, record) restano sul
+  dispositivo (`src/progress.js`); su Playgama vanno anche nel loro cloud save.
 
 ## Tecnica
 
