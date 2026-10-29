@@ -4,7 +4,7 @@ import { createGame, step, drainEvents, result, count, handling, listProgress, e
 import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon, cartIcon } from './render3d.js';
 import { TRACK_ORDER } from './tracks.js';
 import { CARTS, CART_ORDER } from './carts.js';
-import { createProgress, mergeProgress, PROGRESS_KEYS } from './progress.js';
+import { createProgress, mergeProgress, PROGRESS_KEYS, KEYS } from './progress.js';
 import { botSteer, POLICIES } from './bot.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
@@ -223,10 +223,10 @@ function bankCoins() {
   if (d > 0) { progress.addCoins(d); banked = game.coins; }
 }
 
-/** Records also go to the portal's own storage (cloud saves on Playgama). */
+/** Records also go to the portal's own storage (cloud saves on Playgama), except in a tester's build. */
 function saveProgress(key, value) {
   save(key, value);
-  portal.saveProgress(key, value);
+  if (!BUILD.unlockAll) portal.saveProgress(key, value);
 }
 
 /** Between rides the portal may show an ad: silence while it runs, then go on. */
@@ -638,9 +638,15 @@ if (portalReady) {
   const local = Object.fromEntries(PROGRESS_KEYS.map((k) => [k, load(k, null)]));
   for (const [k, v] of Object.entries(mergeProgress(local, cloud))) save(k, v);
   if (typeof cloud[RIDES_KEY] === 'number' && cloud[RIDES_KEY] > (load(RIDES_KEY, 0) || 0)) save(RIDES_KEY, cloud[RIDES_KEY]);
-  pickTrack = progress.track();
-  pickCart = progress.cart();
 }
+// A tester's build (npm run build:unlocked): every track open, every cart in the garage, coins to spare.
+if (BUILD.unlockAll) {
+  save(KEYS.unlocked, TRACK_ORDER.length);
+  save(KEYS.carts, CART_ORDER.slice(1));
+  if (progress.coins() < 50000) save(KEYS.coins, 50000);
+}
+pickTrack = progress.track();
+pickCart = progress.cart();
 goMenu();
 render(R, demo, 0);
 $('loading').hidden = true;

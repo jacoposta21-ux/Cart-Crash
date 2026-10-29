@@ -8,6 +8,7 @@
     "build": "node scripts/build.mjs",
     "build:crazygames": "node scripts/build.mjs --target=crazygames --out=dist-crazygames && rm -f crazygames/cart-crash-crazygames.zip && cd dist-crazygames && zip -qr ../crazygames/cart-crash-crazygames.zip .",
     "build:playgama": "node scripts/build.mjs --target=playgama --out=dist-playgama && rm -f playgama/cart-crash-playgama.zip && cd dist-playgama && zip -qr ../playgama/cart-crash-playgama.zip .",
+    "build:unlocked": "node scripts/build.mjs --target=playgama --unlock-all --out=dist-unlocked && rm -f tester/cart-crash-playgama-UNLOCKED.zip && mkdir -p tester && cd dist-unlocked && zip -qr ../tester/cart-crash-playgama-UNLOCKED.zip .",
     "serve": "node scripts/serve.mjs",
     "dev": "node scripts/build.mjs && node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",

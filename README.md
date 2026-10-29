@@ -116,6 +116,7 @@ npm test                  # test unitari (mondo, lista, cassa, freno, salto, can
 npm run test:e2e          # Playwright: telefono, telefono orizzontale, desktop, build CrazyGames e Playgama con SDK finti
 npm run build:crazygames  # dist-crazygames/ e crazygames/cart-crash-crazygames.zip
 npm run build:playgama    # dist-playgama/ e playgama/cart-crash-playgama.zip
+npm run build:unlocked    # versione di prova Playgama con tutto sbloccato (tester/, da non pubblicare)
 npm run media             # copertine, icone e video di anteprima ricavati dal gioco
 npm run shots             # screenshot rapidi per controllare la grafica
 ```
