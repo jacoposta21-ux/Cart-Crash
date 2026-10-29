@@ -1,18 +1,17 @@
 // The 3D view: a camera behind the cart, the town built section by section,
 // and everything that moves (the cart and its pile, things on the road,
-// people, pigeons, dogs, traffic lights, trains, the checkout, flying debris
-// and little effects).
+// people, pigeons, dogs, traffic lights, trains, the checkout, coins, flying
+// debris and little effects). Sky, light and scenery follow the track.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { itemHeight, stackHeight, wanted, lightPhase, trainSpan, railBarrierDown, crowdPeople } from './game.js';
 import { OBSTACLES, SECTION, LIGHT_STOP, RAIL_STOP } from './world.js';
 import { buildSection } from './town.js';
 import {
   makeItem, makeBalloon, makeCart, makeObstacle, makeWalker, animateWalker, makePigeon, makeDog, animateDog,
-  makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain, makeCop,
+  makeShadow, mat, BASKET_Y, HANDLE, makeRider, poseRider, makeTrafficLight, LAMP_ON, makeRailBarrier, makeTrain, makeCop, makeCoin,
 } from './models.js';
+import { TRACKS } from './tracks.js';
 
-const SKY = '#a8dcf5';
-const FOG = '#d6eef8';
 const VIEW_AHEAD = 115;
 
 export function createRenderer(canvas, fxLayer) {
@@ -21,15 +20,28 @@ export function createRenderer(canvas, fxLayer) {
   const coarse = window.matchMedia?.('(pointer: coarse)').matches;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2));
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(SKY);
-  scene.fog = new THREE.Fog(FOG, 45, VIEW_AHEAD + 10);
+  scene.background = new THREE.Color(TRACKS.borgo.sky);
+  scene.fog = new THREE.Fog(TRACKS.borgo.fog, 45, VIEW_AHEAD + 10);
   const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
-  scene.add(new THREE.HemisphereLight('#e6f4ff', '#d9b98f', 1.9));
+  const hemi = new THREE.HemisphereLight('#e6f4ff', '#d9b98f', 1.9);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff1d6', 1.7);
   scene.add(sun, sun.target);
+  // Stars around the camera (only on the Rainbow Road).
+  const starPos = [];
+  for (let i = 0; i < 700; i++) {
+    const a = Math.random() * Math.PI * 2, b = Math.acos(Math.random() * 1.6 - 0.6), r = 300;
+    starPos.push(Math.cos(a) * Math.sin(b) * r, Math.cos(b) * r, Math.sin(a) * Math.sin(b) * r);
+  }
+  const stars = new THREE.Points(
+    new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3)),
+    new THREE.PointsMaterial({ color: '#ffffff', size: 2, sizeAttenuation: false, fog: false }),
+  );
+  stars.visible = false;
+  scene.add(stars);
 
   const R = {
-    renderer, scene, camera, sun, fxLayer,
+    renderer, scene, camera, sun, hemi, stars, fxLayer,
     sections: new Map(),
     objs: new Map(),
     cart: null,
@@ -90,9 +102,17 @@ export function setGame(R, g) {
   R.balloons = [];
   R.broken.clear();
   R.game = g;
+  // The track's sky and light.
+  const T = g.world.track || TRACKS.borgo;
+  R.scene.background.set(T.sky);
+  R.scene.fog.color.set(T.fog);
+  R.scene.fog.near = T.fogNear;
+  R.hemi.color.set(T.hemi[0]); R.hemi.groundColor.set(T.hemi[1]); R.hemi.intensity = T.hemi[2];
+  R.sun.color.set(T.sun[0]); R.sun.intensity = T.sun[1];
+  R.stars.visible = T.theme === 'rainbow';
   // The cart: root follows the road, body leans and spins, pile sits in the basket.
   const root = new THREE.Group();
-  const body = makeCart();
+  const body = makeCart(g.cartType);
   const pile = new THREE.Group();
   body.add(pile);
   const rider = makeRider();
@@ -156,6 +176,8 @@ export function onEvents(R, g, events, label) {
         burst(R, g, c.x, c.y, 3.5, 12, ['#ff4f6d', '#ffcf3a', '#3fb6ff', '#8f6bff'], 4);
         break;
       case 'curb': bump(R, 0.12); break;
+      case 'coin': burst(R, g, e.x, e.y, 0.5 + e.h, 6, ['#ffcc1a', '#fff3b0'], 2.5); break;
+      case 'falling': text(R, g, c.x, c.y, 2.4, label('falling', e), '', 'bad big'); break;
       case 'bump': if (e.cause === 'pothole') { bump(R, 0.2); burst(R, g, c.x, c.y, 0.2, 6, ['#6b6b6b', '#9a9a9a'], 2); } else if (e.cause === 'stairs') bump(R, 0.05); break;
       case 'land': if (e.impact > 4) { bump(R, Math.min(0.25, e.impact * 0.03)); burst(R, g, c.x, c.y, 0.1, 8, ['#d8ccb4', '#ffffff'], 2.5); } break;
       case 'gameover':
@@ -238,6 +260,7 @@ export function render(R, g, dt) {
     R.shake = Math.max(0, R.shake - dt * 1.6);
   }
   R.camera.lookAt(R.camLook);
+  if (R.stars.visible) R.stars.position.copy(R.camera.position);
   // Sun from the front-left, following the ride.
   R.sun.position.set(c.x - 20, ground + 30, -c.y - 10);
   R.sun.target.position.set(c.x, ground, -c.y - 30);
@@ -303,10 +326,14 @@ function makeEntityObj(R, g, e) {
     if (o.solid) root.add(makeShadow(o.r * 1.2));
     root.add(inner);
     root.userData = { inner };
+  } else if (e.kind === 'coin') {
+    const inner = makeCoin();
+    root.add(inner);
+    root.userData = { inner };
   } else if (e.kind === 'pigeons') {
     const birds = [];
     for (let i = 0; i < e.n; i++) {
-      const p = makePigeon();
+      const p = makePigeon(g.world.track?.birds || 'pigeon');
       p.position.set(Math.cos(i * 2.4) * 0.9, 0, Math.sin(i * 2.4) * 0.7);
       p.rotation.y = i * 1.7;
       root.add(p);
@@ -338,7 +365,10 @@ function syncEntities(R, g) {
     const obj = o.obj;
     const ud = obj.userData;
     obj.position.copy(worldPos(g, e.x, e.y));
-    if (e.kind === 'item') {
+    if (e.kind === 'coin') {
+      ud.inner.position.y = 0.45 + e.h + Math.sin(R.t * 4 + e.id) * 0.06;
+      ud.inner.rotation.y = R.t * 3.5 + e.id * 0.4;
+    } else if (e.kind === 'item') {
       ud.inner.position.y = (e.type === 'balloon' ? 0.9 : 0.12) + Math.sin(R.t * 3 + e.id) * 0.08;
       ud.inner.rotation.y = R.t * 1.6 + e.id;
       const want = e.type !== 'balloon' && wanted(g, e.type === 'goods' ? e.goods : e.type);
@@ -416,6 +446,7 @@ function syncCart(R, g, dt) {
   body.rotation.z = -c.vx * 0.012 - c.flip * 1.6;
   body.position.x = c.flip * 0.5;
   shadow.scale.set(1.3 * Math.max(0.4, 1 - c.z * 0.2), 1, 2.1 * Math.max(0.4, 1 - c.z * 0.2));
+  shadow.visible = !(c.fall > 0);
   shadow.position.set(0, 0.02, 0.25);
   R.cart.cheer = Math.max(0, R.cart.cheer - dt * 1.5);
   poseRider(R.cart.rider, {
@@ -766,26 +797,32 @@ function updateTexts(R, g, dt) {
 const iconCache = new Map();
 let iconRenderer = null;
 export function itemIcon(type, goods = 'cereal') {
-  const key = `${type}|${goods}`;
+  return icon(`${type}|${goods}`, () => makeItem({ type, goods, color: 0 }), 128, [1.2, 1.0, 3]);
+}
+
+/** A cart from the garage, seen from the front and a little to the side. */
+export function cartIcon(type) {
+  return icon(`cart|${type}`, () => makeCart(type), 256, [-2.2, 1.6, -2.6]);
+}
+
+function icon(key, make, px, view) {
   if (iconCache.has(key)) return iconCache.get(key);
   let url = '';
   try {
-    if (!iconRenderer) {
-      iconRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-      iconRenderer.setSize(128, 128, false);
-    }
+    if (!iconRenderer) iconRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    iconRenderer.setSize(px, px, false);
     const scene = new THREE.Scene();
     scene.add(new THREE.HemisphereLight('#ffffff', '#c9a77a', 2.2));
     const sun = new THREE.DirectionalLight('#ffffff', 1.4);
     sun.position.set(-1, 2, 2);
     scene.add(sun);
-    const it = makeItem({ type, goods, color: 0 });
+    const it = make();
     scene.add(it);
     const box = new THREE.Box3().setFromObject(it);
     const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
     const r = Math.max(size.x, size.y, size.z) * 0.62;
     const cam = new THREE.OrthographicCamera(-r, r, r, -r, 0.01, 20);
-    cam.position.set(mid.x + 1.2, mid.y + 1.0, mid.z + 3);
+    cam.position.set(mid.x + view[0], mid.y + view[1], mid.z + view[2]);
     cam.lookAt(mid);
     iconRenderer.render(scene, cam);
     url = iconRenderer.domElement.toDataURL('image/png');

@@ -63,9 +63,20 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   await frames(page, 10);
   check(await visible(page, '#btn-play'), `${name}: Play button visible`);
   check((await page.textContent('#btn-play')).trim() === 'Play', `${name}: English menu`);
-  check(await page.evaluate(() => document.querySelectorAll('#legend li img').length === 4), `${name}: legend shows the four special items`);
   await audit(page, `${name} menu`);
   await page.screenshot({ path: join(SHOTS, `${name}-menu.png`) });
+  await page.click('#btn-help');
+  check(await page.evaluate(() => document.querySelectorAll('#legend li img').length === 4), `${name}: how to play shows the four special items`);
+  await audit(page, `${name} how to play`);
+  await page.click('#btn-help-done');
+  await page.click('#btn-garage');
+  check(await visible(page, '#screen-garage') && (await page.getAttribute('#cart-img', 'src')).startsWith('data:image/png'), `${name}: the garage shows a cart`);
+  await page.click('#cart-next');
+  check((await page.textContent('#cart-action')).includes('150'), `${name}: the next cart has a price`);
+  await audit(page, `${name} garage`);
+  await page.screenshot({ path: join(SHOTS, `${name}-garage.png`) });
+  await page.click('#btn-garage-done');
+  check(await visible(page, '#screen-menu'), `${name}: back from the garage`);
 
   // Ride.
   await page.click('#btn-play');
@@ -182,11 +193,14 @@ for (const [name, viewport, touch] of VIEWPORTS) {
   check(won.extras.includes('+5s') && Math.abs(won.best - won.raw - 5) < 0.01, `${name}: one extra adds 5 s to the time (${won.time} → ${won.score})`);
   await page.screenshot({ path: join(SHOTS, `${name}-win.png`) });
   await audit(page, `${name} win`);
+  const prog = await page.evaluate(() => ({ coins: Number(localStorage.getItem('cartcrash:coins')), unlocked: Number(localStorage.getItem('cartcrash:unlocked')), badge: !document.querySelector('#end-unlock').hidden }));
+  check(prog.coins >= 20, `${name}: coins saved, with the checkout bonus (${prog.coins})`);
+  check(prog.unlocked === 2 && prog.badge, `${name}: finishing the Old Town opens the Harbour`);
   await page.click('#btn-again');
   await page.evaluate(() => window.__cc.pause());
   await page.click('#btn-quit');
   check(await page.evaluate(() => window.__cc.mode) === 'menu', `${name}: back to the menu`);
-  check((await page.textContent('#menu-records')).includes('Best score'), `${name}: the best score is on the menu`);
+  check((await page.textContent('#track-info')).includes('Best score'), `${name}: the best score is on the menu`);
 
   // Settings and languages.
   await page.click('#btn-settings');
@@ -278,6 +292,53 @@ log('\n▶ CrazyGames build with a fake SDK (it-IT, muted)');
   check(html.includes('https://sdk.crazygames.com/crazygames-sdk-v3.js'), 'portal: the CrazyGames build loads SDK v3');
   check(!readFileSync(join(ROOT, 'dist', 'index.html'), 'utf8').includes('crazygames-sdk'), 'web: the web build does not load the SDK');
   check(errors.length === 0, `portal: console errors ${errors.join(' | ')}`);
+  await ctx.close();
+}
+
+log('\n▶ coins, garage and tracks');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('http://127.0.0.1:8097/?test&manual&seed=11');
+  await page.waitForFunction(() => window.__cc && window.__cc.mode === 'menu');
+  const ls = (k) => page.evaluate((key) => localStorage.getItem(key), k);
+  // Locked tracks can be looked at but not played.
+  await page.click('#track-next');
+  check((await page.textContent('#track-name')).includes('Harbour') && await page.evaluate(() => document.querySelector('#btn-play').disabled), 'tracks: the Harbour is locked at first');
+  await page.click('#track-prev');
+  // Coins picked up are kept even when the ride is not finished.
+  await page.click('#btn-play');
+  await page.evaluate(() => { const g = window.__cc.game; g.coins = 7; window.__cc.crashOut(); });
+  await frames(page, 70);
+  check(await page.evaluate(() => window.__cc.mode) === 'end' && Number(await ls('cartcrash:coins')) === 7, 'coins: kept after losing the race');
+  check((await page.textContent('#end-coins')).includes('+7'), 'coins: shown on the end screen');
+  // Buy the Iron Cart: 4 lives.
+  await page.evaluate(() => { localStorage.setItem('cartcrash:coins', '200'); });
+  await page.click('#btn-menu');
+  await page.waitForFunction(() => window.__cc.mode === 'menu');
+  await page.click('#btn-garage');
+  await page.click('#cart-next');
+  await page.click('#cart-action');
+  check(Number(await ls('cartcrash:coins')) === 50 && JSON.parse(await ls('cartcrash:carts')).includes('iron') && JSON.parse(await ls('cartcrash:cart')) === 'iron', 'garage: buying the Iron Cart spends 150 coins and puts it in use');
+  check((await page.textContent('#cart-action')).trim() === 'In use', 'garage: the cart bought is in use');
+  await page.click('#cart-next');
+  check(await page.evaluate(() => document.querySelector('#cart-action').disabled), 'garage: not enough coins for the Racer');
+  await page.click('#btn-garage-done');
+  await page.click('#btn-play');
+  check(await page.evaluate(() => window.__cc.game.maxLives) === 4 && await page.evaluate(() => document.querySelectorAll('#hud-lives .life').length) === 4, 'garage: the Iron Cart gives four lives');
+  await page.evaluate(() => window.__cc.pause());
+  await page.click('#btn-quit');
+  // With every track open, the Rainbow Road can be played.
+  await page.evaluate(() => { localStorage.setItem('cartcrash:unlocked', '4'); window.__cc.refresh(); });
+  await page.click('#track-prev');
+  check((await page.textContent('#track-name')).includes('Rainbow Road') && !(await page.evaluate(() => document.querySelector('#btn-play').disabled)), 'tracks: the Rainbow Road opens');
+  await page.click('#btn-play');
+  check(await page.evaluate(() => window.__cc.game.track) === 'arcobaleno', 'tracks: the race is on the chosen track');
+  await frames(page, 60);
+  await page.screenshot({ path: join(SHOTS, 'rainbow.png') });
+  check(errors.length === 0, `progression: errors ${errors.join(' | ')}`);
   await ctx.close();
 }
 

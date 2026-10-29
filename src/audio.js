@@ -100,6 +100,9 @@ export function play(e) {
     case 'curb': noise(0.08, { vol: 0.35, freq: 600 }); break;
     case 'bump': if (e.cause === 'pothole') { noise(0.12, { vol: 0.6, freq: 400 }); tone(80, 0.15, { type: 'sine', vol: 0.4, slide: 0.6 }); } else if (e.cause === 'stairs') noise(0.05, { vol: 0.25, freq: 500 }); break;
     case 'hop': tone(300, 0.18, { type: 'sine', vol: 0.12, slide: 2 }); break;
+    case 'coin': tone(1320, 0.06, { type: 'square', vol: 0.07 }); tone(1760, 0.12, { type: 'square', vol: 0.07, delay: 0.06 }); break;
+    case 'falling': tone(700, 0.8, { type: 'triangle', vol: 0.16, slide: 0.15 }); break;
+    case 'respawn': [392, 523].forEach((f, i) => tone(f, 0.12, { type: 'triangle', vol: 0.12, delay: i * 0.1 })); break;
     case 'ramp': tone(200, 0.4, { type: 'square', vol: 0.1, slide: 3 }); break;
     case 'land': if (e.impact > 4) noise(0.1, { vol: 0.4, freq: 500 }); break;
     case 'slip': tone(900, 0.4, { type: 'sine', vol: 0.12, slide: 0.4 }); break;

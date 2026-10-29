@@ -85,9 +85,10 @@ export function adBreak(onShow = () => {}) {
       ads.on('interstitial_state_changed', onState);
       ads.showInterstitial();
     } catch { finish(); return; }
-    // Nothing happened (too soon after the last one, or no ad): carry on.
-    setTimeout(() => { if (!opened && ads.interstitialState !== 'loading') finish(); }, 1200);
-    setTimeout(finish, 45000);
+    // No ad on screen within a moment (too soon after the last one, no ad, or the
+    // platform never answers): carry on rather than leave the player waiting.
+    setTimeout(() => { if (!opened) finish(); }, 2500);
+    setTimeout(finish, 40000);
   });
 }
 

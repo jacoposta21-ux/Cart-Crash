@@ -2,8 +2,10 @@
 // after another as the cart gets close, each with its curve, width, slope and
 // what lies on it: things to grab (often the ones on your shopping list),
 // obstacles (some low enough to jump), people, pigeons, dogs, traffic lights
-// with a zebra crossing and level crossings. The deeper you go, the busier.
+// with a zebra crossing and level crossings, and coins. The deeper you go, the
+// busier. Each track (src/tracks.js) changes the mix, the pace and the curves.
 // Units are metres: x across the road, y down the road, elevation up.
+import { trackOf } from './tracks.js';
 
 export const STEP_LENGTH = 1.15; // one stair
 export const STEP_HEIGHT = 0.38;
@@ -50,12 +52,15 @@ export const OBSTACLES = {
   bench: { r: 0.85, w: 0.85, d: 0.28, height: 0.55, solid: true },
   boxes: { r: 0.55, w: 0.5, d: 0.45, height: 0.62, solid: true },
   pipe: { r: 1.5, w: 1.5, d: 0.22, height: 0.45, solid: true },
+  block: { r: 0.5, height: 1.0, solid: true }, // Rainbow Road
+  neon: { r: 1.1, w: 1.1, d: 0.15, height: 0.55, solid: true }, // Rainbow Road, low: jump it
   pothole: { r: 0.5, height: 0.15, solid: false },
   puddle: { r: 0.75, height: 0.1, solid: false },
+  ice: { r: 1.0, height: 0.05, solid: false }, // Mountain: slide like on oil
   ramp: { r: 0.65, height: 0.35, solid: false },
 };
 /** Low enough to jump over. */
-export const JUMPABLE = new Set(['cone', 'barrier', 'bench', 'boxes', 'pipe']);
+export const JUMPABLE = new Set(['cone', 'barrier', 'bench', 'boxes', 'pipe', 'neon']);
 
 // Traffic lights and level crossings: where the cart must stop (metres before the light/track).
 export const LIGHT_STOP = 2.6;
@@ -63,8 +68,9 @@ export const RAIL_STOP = 5;
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
-/** wanted: keys of the things on the shopping list ('melon', 'eggs', 'oil' or a GOODS name). */
-export function createWorld(seed, { wanted = [] } = {}) {
+/** wanted: keys of the things on the shopping list ('melon', 'eggs', 'oil' or a GOODS name). track: a TRACKS id. */
+export function createWorld(seed, { wanted = [], track = 'borgo' } = {}) {
+  const T = trackOf(track);
   const r = rng(seed);
   const pick = (weights) => {
     const entries = Object.entries(weights).filter(([, w]) => w > 0);
@@ -77,12 +83,12 @@ export function createWorld(seed, { wanted = [] } = {}) {
 
   // ---- the road's curve (infinite) ----
   const p1 = r() * 6.28, p2 = r() * 6.28, f1 = range(26, 34), f2 = range(10, 14);
-  const a1 = range(1.6, 2.2), a2 = range(0.5, 0.9);
+  const a1 = range(1.6, 2.2) * T.curve, a2 = range(0.5, 0.9) * T.curve;
   const raw = (y) => a1 * Math.sin(y / f1 + p1) + a2 * Math.sin(y / f2 + p2);
   const base = raw(0);
   const center = (y) => (raw(y) - base) * smooth(y / 40);
 
-  const world = { seed, sections: [], entities: [], made: 0, center, nextId: 0, wanted: [...wanted] };
+  const world = { seed, track: T, sections: [], entities: [], made: 0, center, nextId: 0, wanted: [...wanted] };
   const sections = world.sections;
 
   const sectionAt = (y) => {
@@ -99,9 +105,9 @@ export function createWorld(seed, { wanted = [] } = {}) {
     const w = SECTION[s.kind].hw;
     if (s.prev) {
       const t = (y - s.start) / 7;
-      if (t < 1) return SECTION[s.prev].hw + (w - SECTION[s.prev].hw) * smooth(t);
+      if (t < 1) return (SECTION[s.prev].hw + (w - SECTION[s.prev].hw) * smooth(t)) * T.hw;
     }
-    return w;
+    return w * T.hw;
   };
   /** Height of the ground (it only goes down). Stairs come in steps. */
   const elevation = (y) => {
@@ -122,8 +128,10 @@ export function createWorld(seed, { wanted = [] } = {}) {
     let kind = 'street';
     let len = range(80, 100);
     if (last) {
-      const weights = { street: 3.5, sidewalk: 2, stairs: 2, market: 2 };
-      weights[last.kind] = 0;
+      const weights = { ...T.sections };
+      // Never twice the same in a row (except a long street on a track with few kinds).
+      if (last.kind === 'street' && Object.keys(weights).length < 3) weights.street /= 2;
+      else weights[last.kind] = 0;
       kind = pick(weights);
       len = range(...LEN[kind]);
     }
@@ -152,11 +160,11 @@ export function createWorld(seed, { wanted = [] } = {}) {
     if (GOODS.includes(key)) return { type: 'goods', goods: key };
     return key === 'balloon' ? { type: 'balloon', color: Math.floor(r() * 5) } : { type: key };
   }
-  const obstacleFor = (kind) => pick(kind === 'market'
+  const obstacleFor = (kind) => (T.void ? pick({ block: 3, bollard: 1 }) : pick(kind === 'market'
     ? { crate: 5, bin: 1, cone: 1, boxes: 3 }
     : kind === 'sidewalk'
       ? { bollard: 4, bin: 3, scooter: 2, bench: 2 }
-      : { cone: 4, bin: 2, scooter: 2, crate: 1, boxes: 1 });
+      : { cone: 4, bin: 2, scooter: 2, crate: 1, boxes: 1 }));
 
   function populate(s) {
     const local = [];
@@ -186,10 +194,10 @@ export function createWorld(seed, { wanted = [] } = {}) {
 
     // Traffic light with a zebra crossing, or a level crossing, on wide flat sections.
     if (s.kind === 'street' || s.kind === 'market') {
-      if (nextRail < s.end - 30 && s.kind === 'street' && nextRail > s.start + 25) {
+      if (T.rails && nextRail < s.end - 30 && s.kind === 'street' && nextRail > s.start + 25) {
         local.push({ id: world.nextId++, kind: 'rail', x: center(nextRail), y: nextRail, state: 'idle' });
         nextRail += range(420, 620);
-      } else if (nextLight < s.end - 25 && nextLight > s.start + 20) {
+      } else if (T.lights && nextLight < s.end - 25 && nextLight > s.start + 20) {
         local.push({ id: world.nextId++, kind: 'light', x: center(nextLight), y: nextLight, state: 'idle', willRed: r() < 0.8, crowd: 5 + Math.floor(r() * 5) });
         nextLight += range(140, 220);
       }
@@ -197,22 +205,37 @@ export function createWorld(seed, { wanted = [] } = {}) {
     if (nextLight < s.end) nextLight = Math.max(nextLight, s.end + 25);
     if (nextRail < s.end) nextRail = Math.max(nextRail, s.end + 40);
 
+    // A line of coins to follow (curving a little).
+    const addCoins = (y, off, n = 5) => {
+      const drift = range(-0.35, 0.35);
+      for (let i = 0; i < n; i++) {
+        const yy = y + i * 1.3;
+        if (yy >= s.end - 0.5) break;
+        const lim = halfWidth(yy) - 0.6;
+        local.push({ id: world.nextId++, kind: 'coin', x: center(yy) + Math.max(-lim, Math.min(lim, off + drift * i)), y: yy, h: 0 });
+      }
+    };
+    const people = !T.void; // nobody walks on the rainbow
+    const birds = T.birds ? 1 : 0;
+
     let y = Math.max(s.start + 2, 22);
     while (y < s.end - 2) {
-      // Difficulty 0 → 1 over the first 2.5 km.
-      const d = Math.min(1, y / 2500);
+      // Difficulty 0 → 1 over the first 2.5 km (later tracks start harder).
+      const d = Math.min(1, T.d0 + y / 2500);
       const lim = halfWidth(y) - 0.7;
       const u = () => range(-lim, lim);
       const early = y < 60;
       let pattern;
-      if (s.kind === 'stairs') pattern = pick({ single: 2, row: 1, trail: 1, balloons: 0.3, pigeons: 1, crosser: 1.5 + d, none: 1.5 });
-      else if (s.kind === 'market') pattern = pick({ single: 2.5, row: 1.2, trail: 1, obstacle: 2.5 + 2 * d, gate: 2.5, jump: 1.5, crosser: 2.5 + 2 * d, crowd: 1 + 1.5 * d, along: 1.5 + d, pigeons: 1 });
-      else if (early) pattern = pick({ single: 3, row: 1, trail: 1, obstacle: 1, crosser: 1, pigeons: 1 });
+      if (T.void) pattern = pick({ single: 2.5, row: 1, trail: 1, balloons: 0.6, coins: 1.8, obstacle: 1.6 + 1.5 * d, gate: 1 + d, jump: s.kind === 'street' ? 1.8 + d : 0, ramp: s.kind === 'street' ? 1 : 0, none: 0.8 });
+      else if (s.kind === 'stairs') pattern = pick({ single: 2, row: 1, trail: 1, balloons: 0.3, coins: 1.2, pigeons: birds, crosser: 1.5 + d, ice: T.ice * 0.5, none: 1.5 });
+      else if (s.kind === 'market') pattern = pick({ single: 2.5, row: 1.2, trail: 1, coins: 1.2, obstacle: 2.5 + 2 * d, gate: 2.5, jump: 1.5, crosser: 2.5 + 2 * d, crowd: 1 + 1.5 * d, along: 1.5 + d, pigeons: birds, ice: T.ice * 0.5 });
+      else if (early) pattern = pick({ single: 3, row: 1, trail: 1, coins: 1.5, obstacle: 1, crosser: 1, pigeons: birds });
       else pattern = pick({
-        single: 2.5, row: 1, trail: 0.8, obstacle: 2 + 2 * d, gate: 2 + d, potholes: 1.2 + d, puddle: 1, jump: 2 + d,
+        single: 2.5, row: 1, trail: 0.8, coins: 1.6, obstacle: 2 + 2 * d, gate: 2 + d, potholes: 1.2 + d, puddle: T.ice ? 0 : 1, ice: T.ice * (1 + d), jump: 2 + d,
         roadworks: s.kind === 'street' ? 1 + d : 0, ramp: s.kind === 'street' ? 0.8 : 0,
-        crosser: 2.5 + 3 * d, crowd: 0.8 + 2 * d, along: 1.2 + 1.5 * d, pigeons: 1, dog: 0.45 + 0.3 * d,
+        crosser: 2.5 + 3 * d, crowd: 0.8 + 2 * d, along: 1.2 + 1.5 * d, pigeons: birds, dog: (0.45 + 0.3 * d) * T.dogs,
       });
+      if (!people && ['crosser', 'crowd', 'along'].includes(pattern)) pattern = 'none';
 
       switch (pattern) {
         case 'single': addItem(y, u()); break;
@@ -243,7 +266,7 @@ export function createWorld(seed, { wanted = [] } = {}) {
         case 'gate': {
           // Two obstacles with a prize between them (the clear gap is at least 1.7: the cart is 0.9 wide).
           const gap = range(1.95, 2.5) - 0.25 * d;
-          const type = pick({ crate: 1, bin: 1, cone: 2, bollard: 1 });
+          const type = T.void ? 'block' : pick({ crate: 1, bin: 1, cone: 2, bollard: 1 });
           const half = gap / 2 + OBSTACLES[type].r;
           const mid = range(-lim + half, lim - half) || 0;
           add('obstacle', type, y, mid - half);
@@ -252,12 +275,15 @@ export function createWorld(seed, { wanted = [] } = {}) {
           break;
         }
         case 'jump': {
-          // Something low and wide: jump it, or find the way round.
-          const type = pick(s.kind === 'market' ? { boxes: 2, bench: 1, barrier: 1 } : { barrier: 2, bench: 1, boxes: 1, pipe: 1 });
-          add('obstacle', type, y, u());
+          // Something low and wide: jump it (coins in the air over it), or find the way round.
+          const type = T.void ? 'neon' : pick(s.kind === 'market' ? { boxes: 2, bench: 1, barrier: 1 } : { barrier: 2, bench: 1, boxes: 1, pipe: 1 });
+          const e = add('obstacle', type, y, u());
+          if (e) for (let i = -1; i <= 1; i++) local.push({ id: world.nextId++, kind: 'coin', x: e.x, y: y + i * 1.1, h: 1.3 - Math.abs(i) * 0.35 });
           if (r() < 0.35) addItem(y + 3, u());
           break;
         }
+        case 'coins': addCoins(y, u() * 0.8); y += 5; break;
+        case 'ice': add('obstacle', 'ice', y, u()); if (r() < 0.5) addCoins(y - 1.3, u() * 0.6, 3); break;
         case 'roadworks': {
           // A pipe across most of the road with barriers: jump or squeeze past the end.
           const side = r() < 0.5 ? -1 : 1;
@@ -306,7 +332,7 @@ export function createWorld(seed, { wanted = [] } = {}) {
         }
         default: break;
       }
-      const busy = 1 - 0.3 * d;
+      const busy = (1 - 0.3 * d) * T.busy;
       y += (s.kind === 'market' ? range(6, 8.5) : s.kind === 'stairs' ? range(6.5, 9) : range(7, 10)) * busy;
     }
     local.sort((a, b) => a.y - b.y);

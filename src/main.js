@@ -1,20 +1,22 @@
 // Cart Crash: screens, input, the game loop, records and the portal hooks.
 import { BUILD } from './build.js';
-import { createGame, step, drainEvents, result, count, handling, listProgress, extras, LIVES, EXTRA_PENALTY } from './game.js';
-import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon } from './render3d.js';
+import { createGame, step, drainEvents, result, count, handling, listProgress, extras, EXTRA_PENALTY } from './game.js';
+import { createRenderer, resizeRenderer, setGame, onEvents, render, itemIcon, cartIcon } from './render3d.js';
+import { TRACK_ORDER } from './tracks.js';
+import { CARTS, CART_ORDER } from './carts.js';
+import { createProgress, mergeProgress, PROGRESS_KEYS } from './progress.js';
 import { botSteer, POLICIES } from './bot.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
 import { portal } from './portal.js';
-import { ITEM_NAME, GOODS_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST } from './strings.js';
+import { ITEM_NAME, GOODS_NAME, ITEM_EFFECT, LEGEND, TIPS, SECTION_TOAST, TRACK_NAME, CART_NAME } from './strings.js';
 
 const PORTAL = BUILD.target !== 'web';
 const params = new URLSearchParams(location.search);
 const TEST = params.has('test');
 const DT = 1 / 120;
 
-const BEST_KEY = 'cartcrash:bestScore'; // time + extras penalty, in seconds (lower is better)
 const SHAKE_KEY = 'cartcrash:shake';
 const RIDES_KEY = 'cartcrash:rides';
 
@@ -30,6 +32,11 @@ let demo = null; // the ride behind the menu
 let lastTime = 0;
 let acc = 0;
 let lastSection = null;
+let banked = 0; // coins of this ride already added to the purse
+// Coins, carts and tracks (src/progress.js); records also go to the portal's cloud save.
+const progress = createProgress({ load, save: (k, v) => saveProgress(k, v) });
+let pickTrack = progress.track(); // the track shown in the menu
+let pickCart = progress.cart(); // the cart shown in the garage
 const shownTips = new Set();
 const touchMode = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (touchMode) document.documentElement.classList.add('touch');
@@ -97,6 +104,7 @@ canvas.addEventListener('pointermove', (e) => {
 for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => pointers.delete(e.pointerId));
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('blur', () => { keys.left = keys.right = keys.brake = false; pointers.clear(); if (mode === 'play') pause(); });
+window.addEventListener('pagehide', () => bankCoins());
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { if (mode === 'play') pause(); audio.suspend(); } else audio.resume();
 });
@@ -122,8 +130,32 @@ function icon(src, size) {
 }
 
 function renderMenu() {
-  const best = load(BEST_KEY, null);
-  $('menu-records').innerHTML = best ? t('Best score: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list, reach the checkout, beat the clock.');
+  const id = pickTrack;
+  const i = TRACK_ORDER.indexOf(id);
+  const open = progress.isOpen(id);
+  const best = progress.best(id);
+  $('track-name').textContent = `${i + 1}. ${t(TRACK_NAME[id])}`;
+  $('track-info').innerHTML = !open
+    ? t('Finish {track} to unlock', { track: `<b>${t(TRACK_NAME[TRACK_ORDER[i - 1]])}</b>` })
+    : best !== null ? t('Best score: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list, reach the checkout, beat the clock.');
+  const card = $('track-card');
+  card.classList.toggle('locked', !open);
+  card.dataset.track = id;
+  $('btn-play').disabled = !open;
+  $('menu-coins').textContent = String(progress.coins());
+  const K = CARTS[progress.cart()];
+  $('menu-records').textContent = `${t('Cart')}: ${t(CART_NAME[progress.cart()])} · ${t('Lives')} ${K.lives}${open && i >= 2 && K.lives < 4 ? ` · ${t('Tip: a cart with more lives helps here')}` : ''}`;
+}
+
+function pickTrackBy(d) {
+  const i = (TRACK_ORDER.indexOf(pickTrack) + d + TRACK_ORDER.length) % TRACK_ORDER.length;
+  pickTrack = TRACK_ORDER[i];
+  progress.selectTrack(pickTrack);
+  newDemo();
+  renderMenu();
+}
+
+function renderHelp() {
   $('legend').replaceChildren(...LEGEND.map((type) => {
     const li = document.createElement('li');
     const b = document.createElement('b'); b.textContent = t(ITEM_NAME[type]);
@@ -131,12 +163,64 @@ function renderMenu() {
     li.append(icon(itemIcon(type), 40), b, sp);
     return li;
   }));
-  $('rules').textContent = t('Fill the list to reach the checkout. Every extra thing in the cart adds 5 seconds. Stop at red lights and level crossings. Three crashes and you are out.');
+  $('rules').textContent = `${t('Fill the list to reach the checkout. Every extra thing in the cart adds 5 seconds. Stop at red lights and level crossings. Three crashes and you are out.')} ${t('Coins buy new carts in the garage. Finish a track to open the next one.')}`;
   $('controls-help').innerHTML = touchMode
     ? t('Hold left or right to steer. Swipe up to jump, swipe down and hold to brake.')
     : t('{steer} steer · {brake} brake · {jump} jump · {drop} drop the top thing · {release} let a balloon go', {
       steer: '<kbd>←</kbd><kbd>→</kbd>', brake: '<kbd>↓</kbd>', jump: '<kbd>↑</kbd>', drop: '<kbd>E</kbd>', release: '<kbd>Q</kbd>',
     });
+}
+
+function openScreen(id) {
+  for (const sc of document.querySelectorAll('.screen')) sc.hidden = sc.id !== id;
+  const first = $(id).querySelector('.btn-primary:not(:disabled), .btn');
+  if (first && !touchMode) first.focus({ preventScroll: true });
+}
+
+// ---------- garage ----------
+function renderGarage() {
+  const id = pickCart;
+  const K = CARTS[id];
+  $('garage-coins').textContent = String(progress.coins());
+  $('cart-img').src = cartIcon(id);
+  $('cart-name').textContent = t(CART_NAME[id]);
+  const bar = (v) => { const s = document.createElement('i'); s.className = 'bar'; s.style.setProperty('--v', String(Math.max(0.08, Math.min(1, v)))); return s; };
+  const row = (label, value) => { const li = document.createElement('li'); const b = document.createElement('span'); b.textContent = label; li.append(b, value); return li; };
+  const hearts = document.createElement('span');
+  hearts.className = 'lives';
+  hearts.replaceChildren(...Array.from({ length: K.lives }, () => { const h = document.createElement('i'); h.className = 'life'; return h; }));
+  $('cart-stats').replaceChildren(
+    row(t('Lives'), hearts),
+    row(t('Speed'), bar((K.speed + 1) / 2.4)),
+    row(t('Steering'), bar((K.steer - 0.75) / 0.5)),
+    row(t('Load'), bar((K.pile + K.steady - 0.6) / 2.4)),
+  );
+  const btn = $('cart-action');
+  const owned = progress.has(id);
+  const using = progress.cart() === id;
+  btn.disabled = using || (!owned && progress.coins() < K.price);
+  btn.textContent = using ? t('In use') : owned ? t('Use') : t('Buy: {n} coins', { n: K.price });
+  btn.classList.toggle('btn-secondary', using);
+  btn.classList.toggle('btn-primary', !using);
+}
+
+function pickCartBy(d) {
+  const i = (CART_ORDER.indexOf(pickCart) + d + CART_ORDER.length) % CART_ORDER.length;
+  pickCart = CART_ORDER[i];
+  renderGarage();
+}
+
+function cartAction() {
+  if (progress.has(pickCart)) progress.selectCart(pickCart);
+  else if (progress.buy(pickCart)) { audio.record(); toast(t('New cart!'), 'go'); }
+  renderGarage();
+}
+
+/** Adds this ride's new coins to the purse (also when the ride is not finished). */
+function bankCoins() {
+  if (!game) return;
+  const d = game.coins - banked;
+  if (d > 0) { progress.addCoins(d); banked = game.coins; }
 }
 
 /** Records also go to the portal's own storage (cloud saves on Playgama). */
@@ -160,20 +244,25 @@ const mutes = { portal: false, pause: false, ad: false };
 const applyMute = () => audio.setPortalMuted(mutes.portal || mutes.pause || mutes.ad);
 
 function goMenu() {
+  bankCoins();
   mode = 'menu';
   portal.gameplay(false);
   audio.stopMusic();
   audio.rolling(0, false);
   game = null;
+  pickTrack = progress.track();
   newDemo();
   renderMenu();
   show('screen-menu');
 }
 
-function start() {
+/** A new race on this track (the chosen one by default) with the cart in use. */
+function start(track = progress.track()) {
   audio.unlock();
+  bankCoins();
   const seed = TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0;
-  game = createGame(seed);
+  game = createGame(seed, { track: TEST && params.get('track') ? params.get('track') : track, cart: progress.cart() });
+  banked = 0;
   setGame(R, game);
   lastSection = 'street';
   acc = 0;
@@ -191,6 +280,7 @@ function start() {
 
 function pause() {
   if (mode !== 'play') return;
+  bankCoins();
   mode = 'paused';
   keys.left = keys.right = keys.brake = false;
   pointers.clear();
@@ -214,19 +304,21 @@ function finish() {
   portal.gameplay(false);
   audio.stopMusic();
   audio.rolling(0, false);
+  bankCoins();
   const r = result(game);
-  const best = load(BEST_KEY, null);
+  const best = progress.best(game.track);
   const isRecord = r.won && (best === null || r.total < best);
-  if (isRecord) saveProgress(BEST_KEY, r.total);
-  renderEnd(r, isRecord, best);
+  if (isRecord) progress.setBest(game.track, r.total);
+  const opened = r.won ? progress.finished(game.track) : null;
+  renderEnd(r, isRecord, best, opened);
   show('screen-end');
   if (isRecord) { audio.record(); portal.happytime(); }
 }
 
-function renderEnd(r, isRecord, prevBest) {
+function renderEnd(r, isRecord, prevBest, opened) {
   const title = r.won
     ? (isRecord && prevBest !== null ? t('New record!') : t('Checkout!'))
-    : r.reason === 'train' ? t('Hit by the train!') : t('Three crashes: you are out!');
+    : r.reason === 'train' ? t('Hit by the train!') : r.reason === 'fell' ? t('Fell off the rainbow!') : t('Out of lives!');
   $('end-title').textContent = title;
   $('end-record').hidden = !(isRecord && prevBest !== null);
   $('end-score').textContent = r.won ? formatTime(r.total) : `${r.have}/${r.need}`;
@@ -243,7 +335,10 @@ function renderEnd(r, isRecord, prevBest) {
     $('end-b').textContent = formatTime(r.time);
   }
   $('end-crashes').textContent = String(r.crashes);
-  const best = load(BEST_KEY, null);
+  $('end-coins').innerHTML = `<i class="coin"></i> +${game.coins}${game.bonus ? ` <small>(${t('checkout bonus +{n}', { n: game.bonus })})</small>` : ''}`;
+  $('end-unlock').hidden = !opened;
+  if (opened) $('end-unlock').textContent = t('New track unlocked: {track}!', { track: t(TRACK_NAME[opened]) });
+  const best = progress.best(game.track);
   $('end-best').innerHTML = best ? t('Best score: {time}', { time: `<b>${formatTime(best)}</b>` }) : t('Fill the list and reach the checkout to set a time.');
 }
 
@@ -290,6 +385,7 @@ function buildList() {
 let chipsKey = '';
 let listKey = '';
 let livesShown = -1;
+let coinsShown = -1;
 function updateHud(force) {
   const g = game;
   $('hud-time').textContent = formatTime(g.won ? g.finishTime : g.t);
@@ -314,10 +410,11 @@ function updateHud(force) {
     goal.textContent = t('List: {have}/{need}', { have, need });
     goal.className = 'goal';
   }
+  if (force || coinsShown !== g.coins) { coinsShown = g.coins; $('hud-coins').textContent = String(g.coins); }
   if (force || livesShown !== g.lives) {
     livesShown = g.lives;
     const lives = $('hud-lives');
-    lives.replaceChildren(...Array.from({ length: LIVES }, (_, i) => {
+    lives.replaceChildren(...Array.from({ length: g.maxLives }, (_, i) => {
       const s = document.createElement('i');
       s.className = i < g.lives ? 'life' : 'life lost';
       return s;
@@ -360,6 +457,7 @@ function label(kind, e) {
   if (kind === 'crash') return e.obstacle === 'walker' ? t('Sorry!') : t('Crash!');
   if (kind === 'drop') return nameOf(e.item.type === 'goods' ? e.item.goods : e.item.type);
   if (kind === 'bite') return t('Ouch!');
+  if (kind === 'falling') return t('Whoops!');
   return '';
 }
 
@@ -387,6 +485,7 @@ function handleEvents(g, events, live) {
     if (e.type === 'listdone') toast(t('Got everything! To the checkout!'), 'go');
     if (e.type === 'listbroken') showHint(t('Something on the list fell off: get another one!'), 3000);
     if (e.type === 'crash' && e.lives === 1) showHint(t('Careful: one more crash and you are out!'), 2500);
+    if (e.type === 'respawn') showHint(e.lives === 1 ? t('Careful: one more crash and you are out!') : t('Stay on the rainbow: off the edge costs a life!'), 2500);
   }
 }
 
@@ -401,7 +500,7 @@ function simulate(g, dt, inputFn, live) {
 }
 
 function newDemo() {
-  demo = createGame((Math.random() * 2 ** 32) >>> 0);
+  demo = createGame((Math.random() * 2 ** 32) >>> 0, { track: pickTrack });
   setGame(R, demo);
 }
 
@@ -482,12 +581,21 @@ function translatePage() {
 
 function wire() {
   const on = (id, fn) => $(id).addEventListener('click', () => { audio.unlock(); audio.click(); fn(); });
-  on('btn-play', start);
-  on('btn-again', () => afterRide(start));
+  on('btn-play', () => { if (progress.isOpen(pickTrack)) { progress.selectTrack(pickTrack); start(pickTrack); } });
+  on('btn-again', () => afterRide(() => start(game.track)));
   on('btn-menu', () => afterRide(goMenu));
   on('btn-pause', pause);
   on('btn-resume', resume);
-  on('btn-restart', start);
+  on('btn-restart', () => start(game.track));
+  on('track-prev', () => pickTrackBy(-1));
+  on('track-next', () => pickTrackBy(1));
+  on('btn-garage', () => { pickCart = progress.cart(); renderGarage(); openScreen('screen-garage'); });
+  on('cart-prev', () => pickCartBy(-1));
+  on('cart-next', () => pickCartBy(1));
+  on('cart-action', cartAction);
+  on('btn-garage-done', () => { renderMenu(); openScreen('screen-menu'); });
+  on('btn-help', () => { renderHelp(); openScreen('screen-help'); });
+  on('btn-help-done', () => openScreen('screen-menu'));
   on('btn-quit', goMenu);
   on('btn-settings', () => openSettings('screen-menu'));
   on('btn-pause-settings', () => openSettings('screen-pause'));
@@ -525,11 +633,13 @@ translatePage();
 if (portalReady) {
   portal.onMute((muted) => { mutes.portal = muted; applyMute(); });
   portal.onPause((paused) => { mutes.pause = paused; applyMute(); if (paused) pause(); });
-  // Records saved on the platform win over this device's (a new device, cleared data).
-  const cloud = await portal.loadProgress([BEST_KEY, RIDES_KEY]);
-  const best = load(BEST_KEY, null);
-  if (typeof cloud[BEST_KEY] === 'number' && (best === null || cloud[BEST_KEY] < best)) save(BEST_KEY, cloud[BEST_KEY]);
+  // Progress saved on the platform joins this device's (a new device, cleared data).
+  const cloud = await portal.loadProgress([...PROGRESS_KEYS, RIDES_KEY]);
+  const local = Object.fromEntries(PROGRESS_KEYS.map((k) => [k, load(k, null)]));
+  for (const [k, v] of Object.entries(mergeProgress(local, cloud))) save(k, v);
   if (typeof cloud[RIDES_KEY] === 'number' && cloud[RIDES_KEY] > (load(RIDES_KEY, 0) || 0)) save(RIDES_KEY, cloud[RIDES_KEY]);
+  pickTrack = progress.track();
+  pickCart = progress.cart();
 }
 goMenu();
 render(R, demo, 0);
@@ -544,6 +654,10 @@ if (TEST) {
     get game() { return game; },
     start,
     pause,
+    progress,
+    /** Shows a track in the menu (and its ride behind it). */
+    showTrack(id) { pickTrack = id; newDemo(); renderMenu(); },
+    refresh() { renderMenu(); renderGarage(); },
     frame: (dt = 1 / 30) => frame(dt),
     press: (what) => { pressed[what] = true; },
     /** Simulates `seconds` of riding at once (the bot drives unless an input is given). */

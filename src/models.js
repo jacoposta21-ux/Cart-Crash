@@ -1,6 +1,7 @@
 // Low-poly models built in code (no model files): the things you grab, the
-// cart, obstacles, people, pigeons and a dog. Every model stands on y = 0.
+// carts, obstacles, coins, people, birds and a dog. Every model stands on y = 0.
 import * as THREE from '../vendor/three/three.module.min.js';
+import { cartOf } from './carts.js';
 
 const mats = new Map();
 /** One shared flat-shaded material per colour. */
@@ -150,14 +151,15 @@ export function makeBalloon(color) {
   return g;
 }
 
-/** The shopping cart, facing -z (down the hill). The basket floor is at BASKET_Y. */
+/** A shopping cart (one of src/carts.js), facing -z (down the hill). The basket floor is at BASKET_Y. */
 export const BASKET_Y = 0.42;
-export function makeCart() {
+export function makeCart(type = 'classic') {
   const g = new THREE.Group();
-  const steel = mat('#c9d1de');
+  const look = cartOf(type).colors;
+  const steel = mat(look.frame);
   const W = 1.0, D = 1.25, H = 0.62, y0 = BASKET_Y;
   const bar = (w, h, d, x, y, z) => g.add(mesh(box(w, h, d), steel, x, y, z));
-  const t = 0.035;
+  const t = type === 'iron' ? 0.06 : 0.035;
   // Basket frame: bottom and top rectangles, corner posts.
   for (const y of [y0, y0 + H]) {
     bar(W, t, t, 0, y, -D / 2); bar(W, t, t, 0, y, D / 2);
@@ -175,7 +177,7 @@ export function makeCart() {
   g.add(mesh(box(W, H, 0.01), glass, 0, y0 + H / 2, D / 2));
   g.add(mesh(box(0.01, H, D), glass, -W / 2, y0 + H / 2, 0));
   g.add(mesh(box(0.01, H, D), glass, W / 2, y0 + H / 2, 0));
-  g.add(mesh(box(W, 0.02, D), mat('#8d96a8'), 0, y0, 0));
+  g.add(mesh(box(W, 0.02, D), mat(look.base), 0, y0, 0));
   // Chassis and wheels.
   bar(0.05, 0.05, D * 1.05, -0.36, 0.18, 0); bar(0.05, 0.05, D * 1.05, 0.36, 0.18, 0);
   for (const [x, z] of [[-0.4, -0.5], [0.4, -0.5], [-0.4, 0.55], [0.4, 0.55]]) {
@@ -190,9 +192,45 @@ export function makeCart() {
   // Handle with the red grip, nearest to the camera.
   bar(t, 0.35, t, -W / 2, y0 + H + 0.1, D / 2 + 0.12);
   bar(t, 0.35, t, W / 2, y0 + H + 0.1, D / 2 + 0.12);
-  const grip = mesh(cyl(0.05, 0.05, W + 0.08, 10), mat('#e63946'), 0, y0 + H + 0.26, D / 2 + 0.18);
+  const grip = mesh(cyl(0.05, 0.05, W + 0.08, 10), mat(look.grip), 0, y0 + H + 0.26, D / 2 + 0.18);
   grip.rotation.z = Math.PI / 2;
   g.add(grip);
+  // What makes each cart different to look at.
+  if (type === 'iron') {
+    // Riveted steel plates on the sides.
+    for (const x of [-W / 2 - 0.02, W / 2 + 0.02]) g.add(mesh(box(0.02, H * 0.45, D * 0.96), mat('#3d424c'), x, y0 + H * 0.3, 0));
+  } else if (type === 'racer') {
+    // Racing stripes and a spoiler.
+    for (const x of [-0.12, 0.12]) g.add(mesh(box(0.08, 0.025, D + 0.02), mat('#ffffff'), x, y0 + H + 0.02, 0));
+    g.add(mesh(box(W + 0.2, 0.04, 0.22), mat('#2b2d42'), 0, y0 + H + 0.42, D / 2 + 0.05));
+    for (const x of [-0.35, 0.35]) g.add(mesh(box(0.04, 0.2, 0.04), mat('#2b2d42'), x, y0 + H + 0.32, D / 2 + 0.05));
+  } else if (type === 'jumbo') {
+    // Taller blue side boards (more room).
+    for (const x of [-W / 2 - 0.02, W / 2 + 0.02]) g.add(mesh(box(0.03, 0.28, D), mat('#3a86ff', { opacity: 0.55 }), x, y0 + H + 0.14, 0));
+    g.add(mesh(box(W, 0.28, 0.03), mat('#3a86ff', { opacity: 0.55 }), 0, y0 + H + 0.14, -D / 2 - 0.02));
+  } else if (type === 'rocket') {
+    // Two boosters under the basket, with flames.
+    for (const x of [-0.3, 0.3]) {
+      const b = mesh(cyl(0.11, 0.13, 0.9, 10), mat('#8f6bff'), x, 0.33, 0.25);
+      b.rotation.x = Math.PI / 2;
+      g.add(b);
+      const f = mesh(cone(0.1, 0.35, 8), mat('#ff9f1c', { basic: true }), x, 0.33, 0.88);
+      f.rotation.x = Math.PI / 2;
+      g.add(f);
+    }
+    for (const x of [-0.5, 0.5]) g.add(mesh(box(0.25, 0.03, 0.4), mat('#ffd23f'), x * 1.25, y0 + 0.1, -0.2));
+  }
+  return g;
+}
+
+/** A coin, standing up (it spins around y). */
+const coinGeo = new THREE.CylinderGeometry(0.26, 0.26, 0.06, 16).rotateX(Math.PI / 2);
+const coinRimGeo = new THREE.TorusGeometry(0.22, 0.025, 4, 16);
+export function makeCoin() {
+  const g = new THREE.Group();
+  g.add(mesh(coinGeo, mat('#ffcc1a'), 0, 0, 0));
+  g.add(mesh(coinRimGeo, mat('#f2a900'), 0, 0, 0.035));
+  g.add(mesh(coinRimGeo, mat('#f2a900'), 0, 0, -0.035));
   return g;
 }
 export const HANDLE = new THREE.Vector3(0, BASKET_Y + 0.62 + 0.26, 0.8);
@@ -277,6 +315,30 @@ export function makeObstacle(type) {
       g.add(mesh(box(0.95, 0.42, 0.8), mat('#c89b62'), 0, 0.21, 0));
       g.add(mesh(box(0.6, 0.28, 0.5), mat('#b98a52'), 0.12, 0.56, 0.05));
       g.add(mesh(box(0.97, 0.06, 0.15), mat('#e8d7b0'), 0, 0.3, 0.33));
+      break;
+    }
+    case 'block': {
+      // A floating golden block with a star (Rainbow Road).
+      g.add(mesh(box(0.95, 0.95, 0.95), mat('#ffb703'), 0, 0.5, 0));
+      for (const z of [-0.48, 0.48]) g.add(mesh(box(0.35, 0.35, 0.02), mat('#fff3b0', { basic: true }), 0, 0.5, z));
+      for (const x of [-0.48, 0.48]) g.add(mesh(box(0.02, 0.35, 0.35), mat('#fff3b0', { basic: true }), x, 0.5, 0));
+      g.add(mesh(box(1.0, 0.06, 1.0), mat('#c77d00'), 0, 0.03, 0));
+      break;
+    }
+    case 'neon': {
+      // A low glowing bar across the road (Rainbow Road): jump it.
+      for (const x of [-1.05, 1.05]) g.add(mesh(box(0.1, 0.55, 0.1), mat('#ffffff', { basic: true }), x, 0.275, 0));
+      const bands = ['#ff4f6d', '#ffcf3a', '#3ddc84', '#3fb6ff', '#8f6bff'];
+      for (let i = 0; i < 5; i++) g.add(mesh(box(0.42, 0.14, 0.08), mat(bands[i], { basic: true }), -0.84 + i * 0.42, 0.45, 0));
+      break;
+    }
+    case 'ice': {
+      const p = mesh(cyl(1.0, 1.0, 0.02, 14), mat('#bfe6ff', { opacity: 0.8 }), 0, 0.012, 0);
+      p.scale.set(1, 1, 0.65);
+      g.add(p);
+      const s = mesh(cyl(0.5, 0.5, 0.02, 10), mat('#ffffff', { opacity: 0.7 }), 0.2, 0.025, -0.05);
+      s.scale.set(1, 1, 0.35);
+      g.add(s);
       break;
     }
     case 'pipe': {
@@ -473,17 +535,24 @@ export function animateWalker(g, phase, moving) {
   armL.rotation.x = -a * 0.8; armR.rotation.x = a * 0.8;
 }
 
-export function makePigeon() {
+const BIRDS = {
+  pigeon: { body: '#8d99ae', head: '#6d7a92', beak: '#f4a261' },
+  gull: { body: '#f4f6f8', head: '#ffffff', beak: '#ffc300', wing: '#9aa5b1' },
+  crow: { body: '#2b2d35', head: '#1d1e24', beak: '#4a4a4a' },
+};
+export function makePigeon(kind = 'pigeon') {
+  const look = BIRDS[kind] || BIRDS.pigeon;
   const g = new THREE.Group();
-  const b = mesh(sph(0.12, 8, 6), mat('#8d99ae'), 0, 0.14, 0);
+  const b = mesh(sph(0.12, 8, 6), mat(look.body), 0, 0.14, 0);
   b.scale.set(0.9, 0.85, 1.4);
   g.add(b);
-  g.add(mesh(sph(0.07, 8, 6), mat('#6d7a92'), 0, 0.25, -0.13));
-  const beak = mesh(cone(0.025, 0.06, 5), mat('#f4a261'), 0, 0.24, -0.21);
+  g.add(mesh(sph(0.07, 8, 6), mat(look.head), 0, 0.25, -0.13));
+  const beak = mesh(cone(0.025, 0.06, 5), mat(look.beak), 0, 0.24, -0.21);
   beak.rotation.x = -Math.PI / 2;
   g.add(beak);
-  const wl = mesh(box(0.25, 0.02, 0.14), mat('#6d7a92'), -0.13, 0.18, 0.02);
-  const wr = mesh(box(0.25, 0.02, 0.14), mat('#6d7a92'), 0.13, 0.18, 0.02);
+  const wing = mat(look.wing || look.head);
+  const wl = mesh(box(0.25, 0.02, 0.14), wing, -0.13, 0.18, 0.02);
+  const wr = mesh(box(0.25, 0.02, 0.14), wing, 0.13, 0.18, 0.02);
   g.add(wl, wr);
   g.userData = { wl, wr };
   return g;

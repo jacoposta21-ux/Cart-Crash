@@ -10,4 +10,6 @@ export const TIPS = {
   eggs: 'Eggs! They break on hard bumps.',
   goods: 'Steer gently: the pile sways and things fall off.',
 };
+export const TRACK_NAME = { borgo: 'Old Town', porto: 'Harbour', montagna: 'Mountain', arcobaleno: 'Rainbow Road' };
+export const CART_NAME = { classic: 'Classic', iron: 'Iron Cart', racer: 'Racer', jumbo: 'Jumbo', rocket: 'Rocket' };
 export const SECTION_TOAST = { stairs: 'Stairs!', market: 'Market!', sidewalk: 'Sidewalk!' };

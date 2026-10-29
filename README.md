@@ -61,6 +61,34 @@ più breve.
 Le cose della lista hanno un anello verde e una freccia verde sopra; le altre
 un anello bianco.
 
+## Piste, monete e garage
+
+- **4 piste**, sbloccate una dopo l'altra finendo quella prima (`src/tracks.js`):
+  1. **Borgo**: il paese italiano di partenza.
+  2. **Porto**: case colorate e palme da una parte, il mare con le barche
+     dall'altra; più veloce e con più cani; gabbiani al posto dei piccioni.
+  3. **Montagna**: chalet, neve e abeti; più veloce, strada più curva e
+     **lastre di ghiaccio** che fanno scivolare.
+  4. **Arcobaleno**: una pista arcobaleno sospesa nello spazio, alla Super
+     Mario: niente muri, **se esci dal bordo cadi** e perdi una vita (poi
+     riparti sulla pista); niente pedoni, semafori o treni, ma blocchi dorati,
+     sbarre luminose da saltare e la velocità più alta.
+  Ogni pista ha il suo record. Nel menu le frecce scelgono la pista (quelle
+  bloccate si vedono col lucchetto) e dietro al menu gira una corsa su quella.
+- **Monete** sulla strada (in fila, e in aria sopra gli ostacoli da saltare):
+  si tengono anche se la gara va male. Alla cassa c'è un bonus (20, 35, 55, 90
+  a seconda della pista).
+- **Garage** (`src/carts.js`): con le monete si comprano carrelli diversi.
+  | Carrello | Prezzo | Vite | Caratteristiche |
+  |---|---|---|---|
+  | Classico | gratis | 3 | equilibrato |
+  | Ferro | 150 | 4 | pesante: una vita in più, sterza un po' più lento |
+  | Da corsa | 400 | 3 | più veloce e sterza meglio, pila meno stabile |
+  | Jumbo | 700 | 4 | più spazio per la pila, molto stabile |
+  | Razzo | 1500 | 5 | veloce, sterza bene, stabile |
+- I progressi (monete, carrelli, piste aperte, record) restano sul dispositivo
+  (`src/progress.js`); su Playgama vanno anche nel loro cloud save.
+
 ## Tecnica
 
 - HTML5 + JavaScript (moduli ES), **Three.js r170** in `vendor/three/` (MIT),
