@@ -236,8 +236,11 @@ così com'è). La build carica il **Playgama Bridge SDK**
 - pausa: su `pause_state_changed` il gioco va in pausa e si zittisce;
 - record e numero di gare salvati anche con `bridge.storage` (cloud save);
 - un **interstitial** tra una gara e l'altra (su "Gioca ancora" e "Menu"), con
-  il gioco muto finché è aperto; Playgama decide se e quando c'è un annuncio,
-  con almeno 60 s tra uno e l'altro (`playgama-bridge-config.json`).
+  il gioco muto finché è aperto. Il gioco lo chiede solo dopo **2 minuti e
+  mezzo di gara** dall'apertura e poi al massimo ogni 2 minuti e mezzo di gara
+  (`src/main.js`, FIRST_AD e AD_GAP): con gli annunci più fitti quasi metà
+  dei giocatori chiudeva il gioco dopo l'annuncio. Playgama poi decide se c'è un
+  annuncio, con almeno 60 s tra uno e l'altro (`playgama-bridge-config.json`).
 
 Copertine in `playgama/`: `cover-1920x1080.png` e `cover-1080x1920.png` sono
 l'illustrazione in `brand/cover-art-*.webp` ritagliata alla misura;

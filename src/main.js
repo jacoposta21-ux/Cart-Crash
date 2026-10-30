@@ -239,12 +239,21 @@ function saveProgress(key, value) {
   if (!BUILD.unlockAll) portal.saveProgress(key, value);
 }
 
-/** Between rides the portal may show an ad: silence while it runs, then go on. */
+/**
+ * Between rides the portal may show an ad: silence while it runs, then go on.
+ * Not too soon: none in the first minutes of riding, then at most one every
+ * few minutes (players who get an ad early tend to close the game).
+ */
+const FIRST_AD = 150; // seconds of riding before the first ad
+const AD_GAP = 150; // seconds of riding between two ads
+let played = 0; // seconds of riding in this visit
+let adAt = null; // `played` when the last ad showed
 let breaking = false;
 async function afterRide(next) {
   if (breaking) return;
+  if (played < FIRST_AD || (adAt !== null && played - adAt < AD_GAP)) { next(); return; }
   breaking = true;
-  await portal.adBreak((on) => { mutes.ad = on; applyMute(); });
+  await portal.adBreak((on) => { mutes.ad = on; applyMute(); if (on) adAt = played; });
   breaking = false;
   if (mode === 'end') next();
 }
@@ -631,6 +640,7 @@ function newDemo() {
 
 function frame(dt) {
   if (mode === 'play' && game) {
+    played += dt;
     const autopilot = params.has('autopilot');
     const policy = POLICIES[params.get('policy')] || POLICIES.bot;
     if (match) {
@@ -807,6 +817,8 @@ if (TEST) {
     get mode() { return mode; },
     get game() { return game; },
     get match() { return match; },
+    /** Pretends the player has been riding for this long (the ads' pacing). */
+    played(s) { played = s; },
     start,
     pause,
     progress,
