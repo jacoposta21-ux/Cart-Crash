@@ -8,6 +8,7 @@ import { CARTS, CART_ORDER } from './carts.js';
 import { createProgress, mergeProgress, PROGRESS_KEYS, KEYS } from './progress.js';
 import { catalogOf, lookOfKey, GOODS_H } from './catalog.js';
 import { botSteer, POLICIES } from './bot.js';
+import { TUTORIAL, stageTutorial, tutorialInput, tutorialEvents, tutorialUpdate } from './tutorial.js';
 import { t, initI18n, setLang, getLang, LANGS } from './i18n.js';
 import { load, save } from './storage.js';
 import * as audio from './audio.js';
@@ -22,6 +23,7 @@ const DT = 1 / 120;
 const SHAKE_KEY = 'cartcrash:shake';
 const RIDES_KEY = 'cartcrash:rides';
 const LEVEL_KEY = 'cartcrash:level'; // the Arcade rivals' level
+const TUTORIAL_KEY = 'cartcrash:tutorial'; // the first ride's lesson, once done or left
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -37,6 +39,7 @@ let acc = 0;
 let lastSection = null;
 let banked = 0; // coins of this ride already added to the purse
 let match = null; // a versus race (src/versus.js): game is then the player's cart in it
+let tut = null; // the tutorial (src/tutorial.js) while it runs
 // Coins, carts and tracks (src/progress.js); records also go to the portal's cloud save.
 const progress = createProgress({ load, save: (k, v) => saveProgress(k, v) });
 let pickTrack = progress.track(); // the track shown in the menu
@@ -122,6 +125,7 @@ function show(id) {
   $('touch').hidden = !(touchMode && mode === 'play');
   $('btn-drop').hidden = mode !== 'play';
   $('btn-release').hidden = true;
+  $('coach').hidden = !(tut && mode === 'play');
   $('fx').hidden = mode === 'menu';
   const first = id && $(id)?.querySelector('.btn-primary');
   if (first && !touchMode) first.focus({ preventScroll: true });
@@ -250,6 +254,7 @@ const mutes = { portal: false, pause: false, ad: false };
 const applyMute = () => audio.setPortalMuted(mutes.portal || mutes.pause || mutes.ad);
 
 function goMenu() {
+  leaveTutorial();
   bankCoins();
   mode = 'menu';
   portal.gameplay(false);
@@ -269,16 +274,29 @@ function goMenu() {
 function wakeAudio() {
   audio.unlock();
   if (mode === 'menu') audio.startMusic('menu');
+  else if (mode === 'play' && game) audio.startMusic(game.track); // a ride that started on its own (the tutorial)
 }
 
-/** A new race on this track (the chosen one by default) with the cart in use. versus: against rivals for 7 things. */
-function start(track = progress.track(), versus = false) {
+/** The tutorial is over (done, skipped or left): it does not come back on its own. */
+function leaveTutorial() {
+  if (!tut) return;
+  tut = null;
+  saveProgress(TUTORIAL_KEY, true);
+}
+
+/**
+ * A new race on this track (the chosen one by default) with the cart in use.
+ * versus: against rivals for 7 things. tutorial: the first ride's lesson.
+ */
+function start(track = progress.track(), versus = false, tutorial = false) {
   audio.unlock();
+  leaveTutorial();
   bankCoins();
-  const seed = TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0;
-  const tr = TEST && params.get('track') ? params.get('track') : track;
+  const seed = tutorial ? TUTORIAL.seed : TEST && params.get('seed') ? Number(params.get('seed')) : (Math.random() * 2 ** 32) >>> 0;
+  const tr = tutorial ? TUTORIAL.track : TEST && params.get('track') ? params.get('track') : track;
   match = versus ? createMatch(seed, { track: tr, cart: progress.cart(), level: load(LEVEL_KEY, 'normal') }) : null;
   game = match ? match.games[0] : createGame(seed, { track: tr, cart: progress.cart() });
+  if (tutorial) { tut = stageTutorial(game); shownTips.add('junk'); coachStep = ''; }
   banked = 0;
   setGame(R, game);
   if (match) setRivals(R, match.games.slice(1).map((g, i) => ({ game: g, color: match.colors[i], name: match.names[i] })));
@@ -291,12 +309,13 @@ function start(track = progress.track(), versus = false) {
   show(null);
   buildList();
   updateHud(true);
-  if (match) showHint(t('You and 2 rivals, 7 things on the road. Get all 7 to win at once; after 3 minutes, the most wins. Crashes and falls knock things off: grab them!'), 5000);
+  if (tut) $('hint').hidden = true;
+  else if (match) showHint(t('You and 2 rivals, 7 things on the road. Get all 7 to win at once; after 3 minutes, the most wins. Crashes and falls knock things off: grab them!'), 5000);
   else if (game.T.roller === 'boulder') showHint(t('A boulder is rolling after you: never stop!'), 3500);
   else showHint(touchMode ? t('Swipe up to jump, swipe down to brake') : t('↓ brake · ↑ jump · E drop · Q balloon'), 3500);
   portal.gameplay(true);
   audio.startMusic(game.track);
-  saveProgress(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
+  if (!tut) saveProgress(RIDES_KEY, (load(RIDES_KEY, 0) || 0) + 1);
   if (match) toast(t('Rivals: {names}', { names: match.names.join(' · ') }));
 }
 
@@ -401,6 +420,26 @@ function toast(text, kind = '') {
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 1300);
+}
+
+/** The tutorial's line for each step (src/tutorial.js). */
+let coachStep = '';
+function showCoach(step) {
+  if (step === coachStep) return;
+  coachStep = step;
+  const text = {
+    steer: touchMode ? t('Hold the left or right side of the screen to steer') : t('Steer with ← → or A / D'),
+    jump: touchMode ? t('Swipe up to jump over the barrier!') : t('Press ↑ or Space to jump over the barrier!'),
+    grab: t('Grab the things on your list (top left)'),
+    checkout: t('Got everything! Now reach the checkout'),
+    drop: touchMode ? t('Not on your list! Tap Drop to throw it away') : t('Not on your list! Press E to throw it away'),
+    done: t('Well done! Now a real race'),
+  }[step] || '';
+  const el = $('coach');
+  $('coach-text').textContent = text;
+  el.classList.remove('pop');
+  void el.offsetWidth;
+  el.classList.add('pop');
 }
 
 let hintTimer = null;
@@ -538,6 +577,7 @@ function label(kind, e) {
 }
 
 function handleEvents(g, events, live) {
+  if (tut && live && g === game) tutorialEvents(tut, g, events);
   const quiet = new Set(['pickup', 'fall', 'break', 'crash', 'drop', 'crowdhit', 'caught', 'bite']);
   onEvents(R, g, live ? events : events.filter((e) => !quiet.has(e.type)), label);
   if (!live) return;
@@ -602,13 +642,19 @@ function frame(dt) {
         handleEvents(game, drainEvents(game), true);
         for (const g of match.games.slice(1)) drainEvents(g);
       }
+    } else if (tut) {
+      // the tutorial: time slows down while it waits for the move it asks for
+      const { step: now, slow } = tutorialUpdate(tut, game, dt);
+      showCoach(now);
+      simulate(game, dt * slow, () => { const i = autopilot ? policy(game) : readInput(); tutorialInput(tut, i, DT); return i; }, true);
     } else simulate(game, dt, () => (autopilot ? policy(game) : readInput()), true);
     const sec = game.world.sectionAt(game.cart.y + 12).kind;
     if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && game.checkoutY === null) toast(t(SECTION_TOAST[sec])); }
     audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.over);
     updateHud(false);
-    if (match ? match.over && match.overT > 2 : game.over && game.overT > (game.won ? 2.2 : 1.6)) finish();
-    render(R, game, dt);
+    if (tut) { if (tut.doneT > 1.8) start(TUTORIAL.track); } // straight on to a real race
+    else if (match ? match.over && match.overT > 2 : game.over && game.overT > (game.won ? 2.2 : 1.6)) finish();
+    if (mode === 'play') render(R, game, dt);
   } else if (mode === 'end' && game) {
     if (match) for (const g of match.games.slice(1)) step(g, Math.min(dt, 0.05), 0);
     step(game, Math.min(dt, 0.05), 0);
@@ -695,6 +741,7 @@ function wire() {
   on('btn-garage-done', () => { renderMenu(); openScreen('screen-menu'); });
   on('btn-help', () => { renderHelp(); openScreen('screen-help'); });
   on('btn-help-done', () => openScreen('screen-menu'));
+  on('btn-tutorial', () => start(TUTORIAL.track, false, true));
   on('btn-quit', goMenu);
   on('btn-settings', () => openSettings('screen-menu'));
   on('btn-pause-settings', () => openSettings('screen-pause'));
@@ -748,6 +795,8 @@ pickTrack = progress.track();
 pickCart = progress.cart();
 goMenu();
 render(R, demo, 0);
+// The very first time: straight into the tutorial, then a real race.
+if (!load(TUTORIAL_KEY, false) && !(load(RIDES_KEY, 0) > 0) && (!TEST || params.has('tutorial'))) start(TUTORIAL.track, false, true);
 $('loading').hidden = true;
 if (portalReady) portal.loading(false);
 requestAnimationFrame(loop);

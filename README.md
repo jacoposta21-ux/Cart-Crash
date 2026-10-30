@@ -64,6 +64,24 @@ più breve.
 Le cose della lista hanno un anello verde e una freccia verde sopra; le altre
 un anello bianco.
 
+### Tutorial
+
+La prima volta che si apre il gioco parte subito il **tutorial** (`src/tutorial.js`),
+senza passare dal menu: un tratto del Borgo preparato apposta che insegna una
+cosa alla volta, con una scritta grande sopra la strada.
+
+1. **Sterzare**: monete prima a sinistra, poi a destra.
+2. **Saltare**: una fila di transenne; il tempo rallenta finché non salti.
+3. **Prendere** le 2 cose della lista (pane e bibita); se le manchi
+   ricompaiono davanti al carrello.
+4. **Mollare**: subito dopo c'è un formaggio fuori lista; se lo prendi, il
+   tempo rallenta e ti dice come buttarlo.
+5. **La cassa**, poi "Bravo! Ora una gara vera" e parte da sola una gara normale.
+
+Nel tutorial gli schianti non costano vite; dura 15-25 secondi. Non torna
+più (resta segnato anche se si esce a metà), ma si può rifare da **Come si
+gioca → Tutorial**.
+
 ## Piste, monete e garage
 
 **5 piste**, sbloccate una dopo l'altra finendo quella prima (`src/tracks.js`).

@@ -295,6 +295,33 @@ log('\n▶ CrazyGames build with a fake SDK (it-IT, muted)');
   await ctx.close();
 }
 
+log('\n▶ the tutorial on the first ride (phone, it)');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'it-IT' });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('http://127.0.0.1:8097/?test&manual&autopilot&tutorial');
+  await page.waitForFunction(() => window.__cc && window.__cc.mode === 'play');
+  await frames(page, 1);
+  check(await visible(page, '#coach') && (await page.textContent('#coach-text')).includes('sterzare'), 'tutorial: it starts on its own, with the first lesson');
+  await audit(page, 'tutorial');
+  const lessons = new Set();
+  for (let i = 0; i < 60 && lessons.size < 5; i++) {
+    await frames(page, 15);
+    if (await visible(page, '#coach')) lessons.add(await page.textContent('#coach-text'));
+  }
+  check(lessons.size >= 5, `tutorial: the lessons one after the other (${[...lessons].join(' / ')})`);
+  await frames(page, 90);
+  check(await page.evaluate(() => window.__cc.mode === 'play' && window.__cc.game.list.length === 4) && !(await visible(page, '#coach')), 'tutorial: then a real race starts');
+  check(await page.evaluate(() => localStorage.getItem('cartcrash:tutorial')) === 'true', 'tutorial: done once');
+  await page.reload();
+  await page.waitForFunction(() => window.__cc && window.__cc.mode === 'menu');
+  check(true, 'tutorial: not again next time');
+  check(errors.length === 0, `tutorial: errors ${errors.join(' | ')}`);
+  await ctx.close();
+}
+
 log('\n▶ coins, garage and tracks');
 {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
