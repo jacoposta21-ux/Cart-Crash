@@ -64,23 +64,30 @@ più breve.
 Le cose della lista hanno un anello verde e una freccia verde sopra; le altre
 un anello bianco.
 
-### Tutorial
+### Tutorial e conto alla rovescia
+
+Ogni gara parte con un **3, 2, 1, via!**: il carrello aspetta.
 
 La prima volta che si apre il gioco parte subito il **tutorial** (`src/tutorial.js`),
-senza passare dal menu: un tratto del Borgo preparato apposta che insegna una
-cosa alla volta, con una scritta grande sopra la strada.
+senza passare dal menu: una via del Borgo dove ogni lezione viene preparata
+davanti al carrello quando arriva il suo turno, con una scritta in alto, sotto
+l'HUD, che lascia libera la strada.
 
 1. **Sterzare**: monete prima a sinistra, poi a destra.
-2. **Saltare**: una fila di transenne; il tempo rallenta finché non salti.
-3. **Prendere** le 2 cose della lista (pane e bibita); se le manchi
-   ricompaiono davanti al carrello.
-4. **Mollare**: subito dopo c'è un formaggio fuori lista; se lo prendi, il
-   tempo rallenta e ti dice come buttarlo.
-5. **La cassa**, poi "Bravo! Ora una gara vera" e parte da sola una gara normale.
+2. **Ostacoli**: un cassonetto, un cono e una cassa da evitare.
+3. **Saltare**: una fila di transenne; il tempo rallenta finché non salti.
+4. **Palloncino**: da prendere, poi due file di transenne: col palloncino il
+   salto diventa un super salto.
+5. **Semaforo**: diventa rosso; frenare, aspettare il verde, ripartire.
+6. **Cane**: prima un formaggio da prendere, poi un cane che ti insegue:
+   mollare il formaggio lo tiene occupato.
+7. **La lista**: le 2 cose (pane e bibita); se le manchi ricompaiono davanti al
+   carrello. Poi la cassa, "Bravo! Ora una gara vera", e parte da sola una
+   gara normale.
 
-Nel tutorial gli schianti non costano vite; dura 15-25 secondi. Non torna
-più (resta segnato anche se si esce a metà), ma si può rifare da **Come si
-gioca → Tutorial**.
+Nel tutorial schianti, morsi e multe non costano vite; dura circa 45 secondi.
+Non torna più (resta segnato anche se si esce a metà), ma si può rifare da
+**Come si gioca → Tutorial**.
 
 ## Piste, monete e garage
 

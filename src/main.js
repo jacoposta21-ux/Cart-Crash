@@ -58,6 +58,7 @@ const iconOf = (key) => (GOODS_H[key] ? itemIcon('goods', key) : itemIcon(key, u
 // ---------- size ----------
 function resize() {
   resizeRenderer(R, window.innerWidth, window.innerHeight);
+  if (tut) placeCoach();
 }
 window.addEventListener('resize', resize);
 
@@ -126,6 +127,7 @@ function show(id) {
   $('btn-drop').hidden = mode !== 'play';
   $('btn-release').hidden = true;
   $('coach').hidden = !(tut && mode === 'play');
+  if (mode !== 'play' && mode !== 'paused') { countdown = 0; $('countdown').hidden = true; }
   $('fx').hidden = mode === 'menu';
   const first = id && $(id)?.querySelector('.btn-primary');
   if (first && !touchMode) first.focus({ preventScroll: true });
@@ -305,7 +307,7 @@ function start(track = progress.track(), versus = false, tutorial = false) {
   const tr = tutorial ? TUTORIAL.track : TEST && params.get('track') ? params.get('track') : track;
   match = versus ? createMatch(seed, { track: tr, cart: progress.cart(), level: load(LEVEL_KEY, 'normal') }) : null;
   game = match ? match.games[0] : createGame(seed, { track: tr, cart: progress.cart() });
-  if (tutorial) { tut = stageTutorial(game); shownTips.add('junk'); coachStep = ''; }
+  if (tutorial) { tut = stageTutorial(game); shownTips.add('junk'); coachStep = null; showCoach(''); }
   banked = 0;
   setGame(R, game);
   if (match) setRivals(R, match.games.slice(1).map((g, i) => ({ game: g, color: match.colors[i], name: match.names[i] })));
@@ -316,6 +318,8 @@ function start(track = progress.track(), versus = false, tutorial = false) {
   keys.brake = false;
   mode = 'play';
   show(null);
+  countdown = COUNTDOWN;
+  if (countdown) tickCountdown(0);
   buildList();
   updateHud(true);
   if (tut) $('hint').hidden = true;
@@ -438,17 +442,53 @@ function showCoach(step) {
   coachStep = step;
   const text = {
     steer: touchMode ? t('Hold the left or right side of the screen to steer') : t('Steer with ← → or A / D'),
+    dodge: t('Steer around the obstacles: every crash costs a life'),
     jump: touchMode ? t('Swipe up to jump over the barrier!') : t('Press ↑ or Space to jump over the barrier!'),
+    balloon: t('Grab the balloon!'),
+    superjump: touchMode ? t('With a balloon your jump is a super jump: swipe up!') : t('With a balloon your jump is a super jump: press ↑!'),
+    light: t('A traffic light ahead: watch it!'),
+    'light-red': touchMode ? t('Red light! Swipe down and hold to brake') : t('Red light! Hold ↓ to brake'),
+    'light-wait': t('Wait for the green…'),
+    'light-go': t('Green! Go!'),
+    cheese: t('Grab the cheese: dogs love it'),
+    dog: t('Watch out: dogs chase you!'),
+    'dog-drop': touchMode ? t('A dog is chasing you! Tap Drop to give it the cheese') : t('A dog is chasing you! Press E to give it the cheese'),
+    'dog-run': t('A dog is chasing you! Keep going, don\'t slow down'),
     grab: t('Grab the things on your list (top left)'),
     checkout: t('Got everything! Now reach the checkout'),
-    drop: touchMode ? t('Not on your list! Tap Drop to throw it away') : t('Not on your list! Press E to throw it away'),
     done: t('Well done! Now a real race'),
   }[step] || '';
   const el = $('coach');
   $('coach-text').textContent = text;
+  el.classList.toggle('empty', !text);
+  placeCoach();
   el.classList.remove('pop');
   void el.offsetWidth;
   el.classList.add('pop');
+}
+
+/** The tutorial's line sits just under the top of the HUD, clear of the road. */
+function placeCoach() {
+  const hud = $('hud').getBoundingClientRect();
+  $('coach').style.top = `${Math.round((hud.height ? hud.bottom : 0) + 8)}px`;
+}
+
+/** 3, 2, 1, go! before every race: the cart waits for it. */
+const COUNTDOWN = TEST && !params.has('countdown') ? 0 : 3;
+let countdown = 0;
+function tickCountdown(dt) {
+  const before = Math.ceil(countdown);
+  countdown = Math.max(0, countdown - dt);
+  const now = Math.ceil(countdown);
+  if (now === before && dt > 0) return;
+  const el = $('countdown');
+  el.textContent = now > 0 ? String(now) : t('Go!');
+  el.hidden = false;
+  el.classList.remove('pop');
+  void el.offsetWidth;
+  el.classList.add('pop');
+  audio.play({ type: 'count', go: now === 0 });
+  if (now === 0) setTimeout(() => { if (countdown === 0) el.hidden = true; }, 700);
 }
 
 let hintTimer = null;
@@ -598,8 +638,8 @@ function handleEvents(g, events, live) {
     if (e.type === 'pickup' && !e.wanted && e.item !== 'balloon' && !shownTips.has('junk')) { shownTips.add('junk'); showHint(touchMode ? t('Not on the list: +5 seconds at the checkout! Tap Drop to throw the top thing away.') : t('Not on the list: +5 seconds at the checkout! Press E to drop the top thing.'), 3800); }
     if (e.type === 'tall') toast(t('What a pile!'));
     if (e.type === 'ramp') toast(t('Wheee!'));
-    if (e.type === 'dog') toast(t(CHASER_TOAST[e.species] || CHASER_TOAST.dog));
-    if (e.type === 'yellow') toast(t('Red light ahead: brake!'), 'warn');
+    if (e.type === 'dog' && !tut) toast(t(CHASER_TOAST[e.species] || CHASER_TOAST.dog));
+    if (e.type === 'yellow' && !tut) toast(t('Red light ahead: brake!'), 'warn');
     if (e.type === 'bells') toast(t(CROSSING_TOAST[e.vehicle] || CROSSING_TOAST.train), 'warn');
     if (e.type === 'crowdhit') showHint(t('You ran into the crowd: they knocked everything out of the cart!'), 3500);
     if (e.type === 'cop') { toast(t('Police!'), 'warn'); showHint(t('You ran the red light! The traffic warden is after you for 10 seconds: keep going, don\'t slow down.'), 3800); }
@@ -607,7 +647,7 @@ function handleEvents(g, events, live) {
     if (e.type === 'copgaveup') toast(t('Got away!'), 'go');
     if (e.type === 'bite') showHint(t('Caught! Drop something next time to keep it busy.'), 3200);
     if (e.type === 'dogeats') toast(t('Good dog!'));
-    if (e.type === 'listdone') toast(t('Got everything! To the checkout!'), 'go');
+    if (e.type === 'listdone' && !tut) toast(t('Got everything! To the checkout!'), 'go');
     if (e.type === 'listbroken') showHint(t('Something on the list fell off: get another one!'), 3000);
     if (e.type === 'crash' && e.lives === 1) showHint(t('Careful: one more crash and you are out!'), 2500);
     if (e.type === 'heart') toast(e.coins ? t('+{n} coins', { n: e.coins }) : t('+1 life!'), 'go');
@@ -639,7 +679,10 @@ function newDemo() {
 }
 
 function frame(dt) {
-  if (mode === 'play' && game) {
+  if (mode === 'play' && game && countdown > 0) {
+    tickCountdown(dt);
+    render(R, game, dt);
+  } else if (mode === 'play' && game) {
     played += dt;
     const autopilot = params.has('autopilot');
     const policy = POLICIES[params.get('policy')] || POLICIES.bot;
@@ -659,7 +702,7 @@ function frame(dt) {
       simulate(game, dt * slow, () => { const i = autopilot ? policy(game) : readInput(); tutorialInput(tut, i, DT); return i; }, true);
     } else simulate(game, dt, () => (autopilot ? policy(game) : readInput()), true);
     const sec = game.world.sectionAt(game.cart.y + 12).kind;
-    if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && game.checkoutY === null) toast(t(SECTION_TOAST[sec])); }
+    if (sec !== lastSection) { lastSection = sec; if (SECTION_TOAST[sec] && game.checkoutY === null && !tut) toast(t(SECTION_TOAST[sec])); }
     audio.rolling(game.cart.v, game.cart.z <= 0.02 && !game.over);
     updateHud(false);
     if (tut) { if (tut.doneT > 1.8) start(TUTORIAL.track); } // straight on to a real race

@@ -307,18 +307,32 @@ log('\n▶ the tutorial on the first ride (phone, it)');
   check(await visible(page, '#coach') && (await page.textContent('#coach-text')).includes('sterzare'), 'tutorial: it starts on its own, with the first lesson');
   await audit(page, 'tutorial');
   const lessons = new Set();
-  for (let i = 0; i < 60 && lessons.size < 5; i++) {
+  for (let i = 0; i < 200 && await page.evaluate(() => window.__cc.game.list.length) !== 4; i++) {
     await frames(page, 15);
-    if (await visible(page, '#coach')) lessons.add(await page.textContent('#coach-text'));
+    if (await visible(page, '#coach') && !(await page.evaluate(() => document.getElementById('coach').classList.contains('empty')))) lessons.add(await page.textContent('#coach-text'));
   }
-  check(lessons.size >= 5, `tutorial: the lessons one after the other (${[...lessons].join(' / ')})`);
-  await frames(page, 90);
+  check(lessons.size >= 10, `tutorial: the lessons one after the other (${[...lessons].join(' / ')})`);
   check(await page.evaluate(() => window.__cc.mode === 'play' && window.__cc.game.list.length === 4) && !(await visible(page, '#coach')), 'tutorial: then a real race starts');
   check(await page.evaluate(() => localStorage.getItem('cartcrash:tutorial')) === 'true', 'tutorial: done once');
   await page.reload();
   await page.waitForFunction(() => window.__cc && window.__cc.mode === 'menu');
   check(true, 'tutorial: not again next time');
   check(errors.length === 0, `tutorial: errors ${errors.join(' | ')}`);
+  await ctx.close();
+}
+
+log('\n▶ 3, 2, 1, go!');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'en-US' });
+  const page = await ctx.newPage();
+  await page.goto('http://127.0.0.1:8097/?test&manual&countdown');
+  await page.waitForFunction(() => window.__cc && window.__cc.mode === 'menu');
+  await page.click('#btn-play');
+  check(await visible(page, '#countdown') && (await page.textContent('#countdown')) === '3', 'countdown: 3 at the start');
+  await frames(page, 45);
+  check((await page.textContent('#countdown')) === '2' && await page.evaluate(() => window.__cc.game.cart.y) === 0, 'countdown: the cart waits');
+  await frames(page, 60);
+  check(await page.evaluate(() => window.__cc.game.cart.y) > 0, 'countdown: then go');
   await ctx.close();
 }
 

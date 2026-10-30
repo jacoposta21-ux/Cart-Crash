@@ -244,16 +244,25 @@ html, body {
   box-shadow: 0 4px 0 rgba(29, 35, 64, 0.3); pointer-events: none;
 }
 .hint b { font-family: var(--display); font-weight: 400; font-size: 1.05rem; }
-/* the tutorial's line: big, over the road, never in the way of a tap */
+/* the tutorial's line: just under the HUD (placed from src/main.js), clear of the road */
 .coach {
-  position: fixed; left: 50%; top: 36%; z-index: 12; transform: translateX(-50%); pointer-events: none;
-  width: max-content; max-width: min(90vw, 560px); padding: 12px 20px; border-radius: 18px; text-align: center;
-  background: var(--red); color: #fff; box-shadow: 0 5px 0 rgba(29, 35, 64, 0.45);
+  position: fixed; left: 50%; top: 96px; z-index: 12; transform: translateX(-50%); pointer-events: none;
+  width: max-content; max-width: min(92vw, 520px); padding: 8px 16px; border-radius: 14px; text-align: center;
+  background: var(--red); color: #fff; box-shadow: 0 4px 0 rgba(29, 35, 64, 0.45);
 }
-.coach p { margin: 0; font-family: var(--display); font-size: clamp(1.25rem, 3.6vmin, 1.9rem); line-height: 1.15; -webkit-text-stroke: 0.6px var(--ink); }
+.coach.empty { display: none; }
+.coach p { margin: 0; font-family: var(--display); font-size: clamp(1rem, 2.8vmin, 1.4rem); line-height: 1.15; -webkit-text-stroke: 0.5px var(--ink); }
 .coach.pop { animation: coach-pop 0.35s ease-out; }
 @keyframes coach-pop { from { transform: translateX(-50%) scale(0.85); } 60% { transform: translateX(-50%) scale(1.08); } to { transform: translateX(-50%) scale(1); } } /* never hidden, even on a frame that stalls */
-@media (prefers-reduced-motion: reduce) { .coach.pop { animation: none; } }
+/* 3, 2, 1, go! */
+.countdown {
+  position: fixed; left: 50%; top: 30%; z-index: 13; transform: translate(-50%, -50%); pointer-events: none;
+  font-family: var(--display); font-size: clamp(5rem, 22vmin, 11rem); line-height: 1; color: var(--yellow, #ffd23f);
+  -webkit-text-stroke: 4px var(--ink); text-shadow: 0 8px 0 rgba(29, 35, 64, 0.45);
+}
+.countdown.pop { animation: count-pop 0.5s ease-out; }
+@keyframes count-pop { from { transform: translate(-50%, -50%) scale(1.6); } to { transform: translate(-50%, -50%) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .coach.pop, .countdown.pop { animation: none; } }
 
 .touch-zones { position: fixed; inset: auto 0 0 0; height: 30%; z-index: 5; pointer-events: none; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 14px calc(20px + var(--safe-b)); }
 .tz { width: 76px; height: 76px; border-radius: 50%; background: rgba(29, 35, 64, 0.28); display: grid; place-items: center; transition: background 0.1s, transform 0.1s; }

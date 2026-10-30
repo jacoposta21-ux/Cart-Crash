@@ -137,6 +137,7 @@ export function play(e) {
     case 'listdone': [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.16, { type: 'square', vol: 0.1, delay: i * 0.08 })); break;
     case 'listbroken': tone(392, 0.25, { type: 'triangle', vol: 0.14, slide: 0.5 }); break;
     case 'checkout': [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.3, { type: 'square', vol: 0.12, delay: i * 0.12 })); tone(2093, 0.4, { type: 'sine', vol: 0.12, delay: 0.55 }); break;
+    case 'count': tone(e.go ? 1047 : 523, e.go ? 0.45 : 0.16, { type: 'square', vol: 0.14 }); break;
     case 'pigeons': for (let i = 0; i < 5; i++) noise(0.05, { vol: 0.2, freq: 2500, delay: i * 0.06 }); break;
     default: break;
   }
